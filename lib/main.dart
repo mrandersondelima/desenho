@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'screens/camera_overlay_screen.dart';
+import 'screens/project_list_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -17,7 +17,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: CameraOverlayScreen(),
+      home: ProjectListScreen(),
       debugShowCheckedModeBanner: false,
     );
   }

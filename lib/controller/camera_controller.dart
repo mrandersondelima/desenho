@@ -3,6 +3,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../models/project.dart';
+import '../services/project_service.dart';
 
 class CameraOverlayController extends GetxController {
   // Observable variables
@@ -17,6 +19,10 @@ class CameraOverlayController extends GetxController {
   RxDouble imageScale = 1.0.obs;
   RxDouble imageRotation = 0.0.obs; // Nova variável para rotação
   RxBool showOverlayImage = true.obs;
+
+  // Projeto atual
+  Rx<Project?> currentProject = Rx<Project?>(null);
+  final ProjectService _projectService = ProjectService();
 
   // TextEditingController para input de rotação
   final TextEditingController rotationTextController = TextEditingController();
@@ -117,6 +123,7 @@ class CameraOverlayController extends GetxController {
         imageScale.value = 1.0;
         imageRotation.value = 0.0;
         rotationTextController.text = '0';
+        _autoSave();
       }
     } catch (e) {
       Get.snackbar('Erro', 'Erro ao selecionar imagem: $e');
@@ -125,21 +132,25 @@ class CameraOverlayController extends GetxController {
 
   void updateOpacity(double value) {
     imageOpacity.value = value;
+    _autoSave();
   }
 
   void updatePosition(double x, double y) {
     imagePositionX.value = x;
     imagePositionY.value = y;
+    _autoSave();
   }
 
   void updateScale(double value) {
     imageScale.value = value;
+    _autoSave();
   }
 
   void updateRotation(double value) {
     imageRotation.value = value;
     // Atualiza o campo de texto sem triggar o listener
     rotationTextController.text = value.round().toString();
+    _autoSave();
   }
 
   void updateRotationFromText(String text) {
@@ -150,6 +161,7 @@ class CameraOverlayController extends GetxController {
       imageRotation.value = normalizedValue < 0
           ? normalizedValue + 360
           : normalizedValue;
+      _autoSave();
     }
   }
 
@@ -157,6 +169,7 @@ class CameraOverlayController extends GetxController {
     final newRotation = (imageRotation.value + degrees) % 360;
     imageRotation.value = newRotation;
     rotationTextController.text = newRotation.round().toString();
+    _autoSave();
   }
 
   // Gesture handlers for ScaleGestureRecognizer (covers pan + scale)
@@ -180,11 +193,90 @@ class CameraOverlayController extends GetxController {
   }
 
   void onScaleEnd(ScaleEndDetails details) {
-    // Nothing special for now; could add inertia or snapping here.
+    // Salva após terminar o gesto
+    _autoSave();
   }
 
   void toggleOverlayVisibility() {
     showOverlayImage.value = !showOverlayImage.value;
+    _autoSave();
+  }
+
+  // Métodos de gerenciamento de projeto
+  void loadProject(Project project) {
+    currentProject.value = project;
+
+    // Carrega as configurações do projeto
+    if (project.overlayImagePath != null &&
+        project.overlayImagePath!.isNotEmpty) {
+      selectedImagePath.value = project.overlayImagePath!;
+    }
+    imageOpacity.value = project.imageOpacity;
+    imagePositionX.value = project.imagePositionX;
+    imagePositionY.value = project.imagePositionY;
+    imageScale.value = project.imageScale;
+    imageRotation.value = project.imageRotation;
+    showOverlayImage.value = project.showOverlayImage;
+
+    // Atualiza o controller de texto
+    rotationTextController.text = project.imageRotation.toInt().toString();
+  }
+
+  Future<void> saveCurrentProject() async {
+    if (currentProject.value != null) {
+      await _projectService.initialize();
+
+      // Atualiza o projeto com as configurações atuais
+      final updatedProject = currentProject.value!.copyWith(
+        overlayImagePath: selectedImagePath.value.isNotEmpty
+            ? selectedImagePath.value
+            : null,
+        imageOpacity: imageOpacity.value,
+        imagePositionX: imagePositionX.value,
+        imagePositionY: imagePositionY.value,
+        imageScale: imageScale.value,
+        imageRotation: imageRotation.value,
+        showOverlayImage: showOverlayImage.value,
+        lastModified: DateTime.now(),
+      );
+
+      final success = await _projectService.saveProject(updatedProject);
+      if (success) {
+        currentProject.value = updatedProject;
+      }
+    }
+  }
+
+  // Auto-save a cada mudança importante
+  void _autoSave() {
+    if (currentProject.value != null) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        saveCurrentProject();
+      });
+    }
+  }
+
+  // Novos métodos para incluir auto-save
+  void setImageOpacity(double value) {
+    imageOpacity.value = value;
+    _autoSave();
+  }
+
+  void updateImagePosition(double deltaX, double deltaY) {
+    imagePositionX.value += deltaX;
+    imagePositionY.value += deltaY;
+    _autoSave();
+  }
+
+  void updateImageScale(double scale) {
+    imageScale.value = scale;
+    _autoSave();
+  }
+
+  void updateImageRotation(double rotation) {
+    imageRotation.value = rotation;
+    rotationTextController.text = rotation.toInt().toString();
+    _autoSave();
   }
 
   void resetImageTransform() {
@@ -194,5 +286,6 @@ class CameraOverlayController extends GetxController {
     imageRotation.value = 0.0;
     imageOpacity.value = 0.5;
     rotationTextController.text = '0';
+    _autoSave();
   }
 }

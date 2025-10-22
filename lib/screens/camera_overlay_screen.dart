@@ -3,16 +3,45 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controller/camera_controller.dart';
+import '../models/project.dart';
 
 class CameraOverlayScreen extends StatelessWidget {
+  final Project? project;
   final CameraOverlayController controller = Get.put(CameraOverlayController());
 
-  CameraOverlayScreen({super.key});
+  CameraOverlayScreen({super.key, this.project});
 
   @override
   Widget build(BuildContext context) {
+    // Carrega o projeto se fornecido
+    if (project != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.loadProject(project!);
+      });
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black.withValues(alpha: 0.7),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Get.back(),
+        ),
+        title: Text(
+          project?.name ?? 'Camera Overlay',
+          style: const TextStyle(color: Colors.white, fontSize: 18),
+        ),
+        actions: [
+          if (project != null)
+            IconButton(
+              icon: const Icon(Icons.save, color: Colors.white),
+              onPressed: controller.saveCurrentProject,
+              tooltip: 'Salvar projeto',
+            ),
+        ],
+      ),
       body: Obx(() {
         if (controller.isLoading.value) {
           return const Center(
