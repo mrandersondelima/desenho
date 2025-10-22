@@ -1,0 +1,5 @@
+<!-- Arquivo SVG de exemplo -->
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="100" cy="100" r="80" fill="rgba(255, 0, 0, 0.7)" stroke="white" stroke-width="4"/>
+  <text x="100" y="110" text-anchor="middle" fill="white" font-size="20" font-weight="bold">OVERLAY</text>
+</svg>
