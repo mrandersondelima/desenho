@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +21,14 @@ class CameraOverlayController extends GetxController {
   RxDouble imageRotation = 0.0.obs; // Nova variável para rotação
   RxBool showOverlayImage = true.obs;
 
+  // Modo de interação: true = modo desenho, false = modo ajuste
+  RxBool isDrawingMode = false.obs;
+
+  // Zoom da câmera
+  RxDouble cameraZoom = 1.0.obs;
+  double _minCameraZoom = 1.0;
+  double _maxCameraZoom = 8.0;
+
   // Projeto atual
   Rx<Project?> currentProject = Rx<Project?>(null);
   final ProjectService _projectService = ProjectService();
@@ -27,11 +36,22 @@ class CameraOverlayController extends GetxController {
   // TextEditingController para input de rotação
   final TextEditingController rotationTextController = TextEditingController();
 
+  // Controllers para ajuste fino de dimensões
+  final TextEditingController imageWidthController = TextEditingController();
+  final TextEditingController imageHeightController = TextEditingController();
+
+  // Dimensões originais da imagem
+  RxDouble originalImageWidth = 0.0.obs;
+  RxDouble originalImageHeight = 0.0.obs;
+  RxDouble currentImageWidth = 0.0.obs;
+  RxDouble currentImageHeight = 0.0.obs;
+
   // Internal gesture tracking
   late Offset _startFocalPoint;
   double _initialScale = 1.0;
   double _initialX = 0.0;
   double _initialY = 0.0;
+  double _initialCameraZoom = 1.0; // Zoom inicial da câmera para gestos
 
   @override
   void onInit() {
@@ -42,8 +62,13 @@ class CameraOverlayController extends GetxController {
 
   @override
   void onClose() {
+    // Força salvamento antes de fechar
+    forceSave();
+
     cameraController.value?.dispose();
     rotationTextController.dispose();
+    imageWidthController.dispose();
+    imageHeightController.dispose();
     super.onClose();
   }
 
@@ -87,6 +112,12 @@ class CameraOverlayController extends GetxController {
 
     try {
       await cameraController.value!.initialize();
+
+      // Inicializa os valores de zoom da câmera
+      _minCameraZoom = await cameraController.value!.getMinZoomLevel();
+      _maxCameraZoom = await cameraController.value!.getMaxZoomLevel();
+      cameraZoom.value = _minCameraZoom;
+
       isCameraInitialized.value = true;
     } catch (e) {
       Get.snackbar('Erro', 'Erro ao configurar câmera: $e');
@@ -123,6 +154,10 @@ class CameraOverlayController extends GetxController {
         imageScale.value = 1.0;
         imageRotation.value = 0.0;
         rotationTextController.text = '0';
+
+        // Carrega dimensões da imagem
+        await _loadImageDimensions();
+
         _autoSave();
       }
     } catch (e) {
@@ -178,18 +213,41 @@ class CameraOverlayController extends GetxController {
     _initialScale = imageScale.value;
     _initialX = imagePositionX.value;
     _initialY = imagePositionY.value;
+    _initialCameraZoom = cameraZoom.value; // Armazena zoom inicial da câmera
   }
 
   void onScaleUpdate(ScaleUpdateDetails details) {
-    // Update scale (pinch)
-    final double newScale = (_initialScale * details.scale).clamp(0.2, 5.0);
-    imageScale.value = newScale;
+    if (isDrawingMode.value) {
+      // Modo Desenho: zoom na câmera e na imagem simultaneamente
+      final double newScale = (_initialScale * details.scale).clamp(0.2, 5.0);
+      imageScale.value = newScale;
 
-    // Update position (drag) — calculate delta from start focal point
-    final dx = details.focalPoint.dx - _startFocalPoint.dx;
-    final dy = details.focalPoint.dy - _startFocalPoint.dy;
-    imagePositionX.value = _initialX + dx;
-    imagePositionY.value = _initialY + dy;
+      // Aplica zoom na câmera baseado no zoom inicial
+      final newCameraZoom = (_initialCameraZoom * details.scale).clamp(
+        _minCameraZoom,
+        _maxCameraZoom,
+      );
+      setCameraZoom(newCameraZoom);
+
+      // Update position (drag) — calculate delta from start focal point
+      final dx = details.focalPoint.dx - _startFocalPoint.dx;
+      final dy = details.focalPoint.dy - _startFocalPoint.dy;
+      imagePositionX.value = _initialX + dx;
+      imagePositionY.value = _initialY + dy;
+    } else {
+      // Modo Ajuste: apenas a imagem é manipulada (comportamento original)
+      final double newScale = (_initialScale * details.scale).clamp(0.2, 5.0);
+      imageScale.value = newScale;
+
+      // Update position (drag) — calculate delta from start focal point
+      final dx = details.focalPoint.dx - _startFocalPoint.dx;
+      final dy = details.focalPoint.dy - _startFocalPoint.dy;
+      imagePositionX.value = _initialX + dx;
+      imagePositionY.value = _initialY + dy;
+    }
+
+    // Atualiza dimensões atuais quando escala mudar
+    _updateCurrentDimensions();
   }
 
   void onScaleEnd(ScaleEndDetails details) {
@@ -202,24 +260,60 @@ class CameraOverlayController extends GetxController {
     _autoSave();
   }
 
+  // Métodos de controle de modo e zoom da câmera
+  void toggleDrawingMode() {
+    isDrawingMode.value = !isDrawingMode.value;
+
+    // Reset do zoom da câmera quando sai do modo desenho
+    if (!isDrawingMode.value) {
+      setCameraZoom(_minCameraZoom);
+    }
+
+    _autoSave();
+  }
+
+  Future<void> setCameraZoom(double zoom) async {
+    if (cameraController.value != null && isCameraInitialized.value) {
+      try {
+        final clampedZoom = zoom.clamp(_minCameraZoom, _maxCameraZoom);
+        await cameraController.value!.setZoomLevel(clampedZoom);
+        cameraZoom.value = clampedZoom;
+      } catch (e) {
+        print('Erro ao aplicar zoom da câmera: $e');
+      }
+    }
+  }
+
+  void resetCameraZoom() {
+    setCameraZoom(_minCameraZoom);
+  }
+
   // Métodos de gerenciamento de projeto
-  void loadProject(Project project) {
-    currentProject.value = project;
+  void loadProject(Project project) async {
+    // Primeiro recarrega o projeto do storage para ter a versão mais recente
+    final updatedProject = await _projectService.loadProject(project.id);
+    final projectToLoad = updatedProject ?? project;
+
+    currentProject.value = projectToLoad;
 
     // Carrega as configurações do projeto
-    if (project.overlayImagePath != null &&
-        project.overlayImagePath!.isNotEmpty) {
-      selectedImagePath.value = project.overlayImagePath!;
+    if (projectToLoad.overlayImagePath != null &&
+        projectToLoad.overlayImagePath!.isNotEmpty) {
+      selectedImagePath.value = projectToLoad.overlayImagePath!;
+      // Carrega dimensões da imagem quando carrega projeto
+      _loadImageDimensions();
     }
-    imageOpacity.value = project.imageOpacity;
-    imagePositionX.value = project.imagePositionX;
-    imagePositionY.value = project.imagePositionY;
-    imageScale.value = project.imageScale;
-    imageRotation.value = project.imageRotation;
-    showOverlayImage.value = project.showOverlayImage;
+    imageOpacity.value = projectToLoad.imageOpacity;
+    imagePositionX.value = projectToLoad.imagePositionX;
+    imagePositionY.value = projectToLoad.imagePositionY;
+    imageScale.value = projectToLoad.imageScale;
+    imageRotation.value = projectToLoad.imageRotation;
+    showOverlayImage.value = projectToLoad.showOverlayImage;
 
     // Atualiza o controller de texto
-    rotationTextController.text = project.imageRotation.toInt().toString();
+    rotationTextController.text = projectToLoad.imageRotation
+        .toInt()
+        .toString();
   }
 
   Future<void> saveCurrentProject() async {
@@ -256,6 +350,13 @@ class CameraOverlayController extends GetxController {
     }
   }
 
+  // Força salvamento imediato (sem delay)
+  Future<void> forceSave() async {
+    if (currentProject.value != null) {
+      await saveCurrentProject();
+    }
+  }
+
   // Novos métodos para incluir auto-save
   void setImageOpacity(double value) {
     imageOpacity.value = value;
@@ -270,6 +371,7 @@ class CameraOverlayController extends GetxController {
 
   void updateImageScale(double scale) {
     imageScale.value = scale;
+    _updateCurrentDimensions(); // Atualiza dimensões quando escala mudar
     _autoSave();
   }
 
@@ -286,6 +388,315 @@ class CameraOverlayController extends GetxController {
     imageRotation.value = 0.0;
     imageOpacity.value = 0.5;
     rotationTextController.text = '0';
+
+    // Reset do zoom da câmera também
+    resetCameraZoom();
+
     _autoSave();
+  }
+
+  // Carrega as dimensões da imagem selecionada
+  Future<void> _loadImageDimensions() async {
+    if (selectedImagePath.value.isNotEmpty) {
+      try {
+        final imageFile = File(selectedImagePath.value);
+        final imageBytes = await imageFile.readAsBytes();
+        final image = await decodeImageFromList(imageBytes);
+
+        originalImageWidth.value = image.width.toDouble();
+        originalImageHeight.value = image.height.toDouble();
+
+        // Calcula dimensões atuais baseadas na escala
+        _updateCurrentDimensions();
+
+        // Atualiza os controllers
+        imageWidthController.text = currentImageWidth.value.round().toString();
+        imageHeightController.text = currentImageHeight.value
+            .round()
+            .toString();
+
+        image.dispose();
+      } catch (e) {
+        print('Erro ao carregar dimensões da imagem: $e');
+      }
+    }
+  }
+
+  // Atualiza as dimensões atuais baseadas na escala
+  void _updateCurrentDimensions() {
+    if (originalImageWidth.value > 0 && originalImageHeight.value > 0) {
+      currentImageWidth.value = originalImageWidth.value * imageScale.value;
+      currentImageHeight.value = originalImageHeight.value * imageScale.value;
+    }
+  }
+
+  // Aplica novas dimensões ajustando a escala
+  void applyImageDimensions(int width, int height) {
+    if (originalImageWidth.value > 0 && originalImageHeight.value > 0) {
+      // Calcula a escala baseada na largura (prioritária)
+      final newScale = width / originalImageWidth.value;
+
+      print(
+        'Aplicando dimensões: ${width} x ${height}, nova escala: ${newScale}',
+      );
+
+      // Aplica a nova escala
+      imageScale.value = newScale.clamp(0.1, 10.0);
+
+      // Atualiza dimensões atuais
+      _updateCurrentDimensions();
+
+      // Atualiza controllers para refletir as dimensões reais
+      imageWidthController.text = currentImageWidth.value.round().toString();
+      imageHeightController.text = currentImageHeight.value.round().toString();
+
+      _autoSave();
+    } else {
+      print('Erro: Dimensões originais não carregadas');
+    }
+  }
+
+  // Exibe modal para ajuste fino de dimensões
+  Future<void> showDimensionsModal() async {
+    if (selectedImagePath.value.isEmpty) {
+      Get.snackbar('Erro', 'Selecione uma imagem primeiro');
+      return;
+    }
+
+    // Carrega dimensões se ainda não foram carregadas
+    if (originalImageWidth.value == 0 || originalImageHeight.value == 0) {
+      await _loadImageDimensions();
+    }
+
+    // Atualiza dimensões atuais
+    _updateCurrentDimensions();
+    imageWidthController.text = currentImageWidth.value.round().toString();
+    imageHeightController.text = currentImageHeight.value.round().toString();
+
+    Get.dialog(
+      Dialog(
+        backgroundColor: Colors.transparent,
+        child: Obx(
+          () => Container(
+            margin: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue, width: 1),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Título
+                Row(
+                  children: [
+                    Icon(Icons.photo_size_select_large, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text(
+                      'Ajuste Fino de Dimensões',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 20),
+
+                // Informações da imagem original
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Dimensões Originais',
+                        style: TextStyle(
+                          color: Colors.grey[300],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        '${originalImageWidth.value.round()} × ${originalImageHeight.value.round()} px',
+                        style: TextStyle(color: Colors.white, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 16),
+
+                // Campos de entrada
+                Row(
+                  children: [
+                    // Largura
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Largura (px)',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          SizedBox(height: 6),
+                          TextField(
+                            controller: imageWidthController,
+                            keyboardType: TextInputType.number,
+                            style: TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: Colors.grey),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: Colors.blue),
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey.withValues(alpha: 0.1),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    // Altura
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Altura (px)',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          SizedBox(height: 6),
+                          TextField(
+                            controller: imageHeightController,
+                            keyboardType: TextInputType.number,
+                            style: TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: Colors.grey),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: Colors.blue),
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey.withValues(alpha: 0.1),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 20),
+
+                // Botões
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Get.back(),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: Colors.grey),
+                          ),
+                        ),
+                        child: Text(
+                          'Cancelar',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          final width = int.tryParse(imageWidthController.text);
+                          final height = int.tryParse(
+                            imageHeightController.text,
+                          );
+
+                          if (width != null &&
+                              height != null &&
+                              width > 0 &&
+                              height > 0) {
+                            applyImageDimensions(width, height);
+                            Get.back();
+                            Get.snackbar(
+                              'Sucesso',
+                              'Dimensões aplicadas: ${width} × ${height} px',
+                              snackPosition: SnackPosition.BOTTOM,
+                              backgroundColor: Colors.green.withValues(
+                                alpha: 0.8,
+                              ),
+                              colorText: Colors.white,
+                            );
+                          } else {
+                            Get.snackbar(
+                              'Erro',
+                              'Digite valores válidos para largura e altura',
+                              snackPosition: SnackPosition.BOTTOM,
+                              backgroundColor: Colors.red.withValues(
+                                alpha: 0.8,
+                              ),
+                              colorText: Colors.white,
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: Text(
+                          'Aplicar',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ), // Fechamento do Obx
+      ),
+    );
   }
 }

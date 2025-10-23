@@ -27,7 +27,11 @@ class CameraOverlayScreen extends StatelessWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Get.back(),
+          onPressed: () async {
+            // Força salvamento antes de voltar
+            await controller.forceSave();
+            Get.back();
+          },
         ),
         title: Text(
           project?.name ?? 'Camera Overlay',
@@ -300,6 +304,76 @@ class CameraOverlayScreen extends StatelessWidget {
                       ],
                     ),
 
+                    // Mode Toggle (when image is selected)
+                    if (controller.selectedImagePath.value.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+
+                      // Mode Toggle Switch
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.tune,
+                              color: !controller.isDrawingMode.value
+                                  ? Colors.white
+                                  : Colors.grey,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Ajuste',
+                              style: TextStyle(
+                                color: !controller.isDrawingMode.value
+                                    ? Colors.white
+                                    : Colors.grey,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Switch(
+                              value: controller.isDrawingMode.value,
+                              onChanged: (value) =>
+                                  controller.toggleDrawingMode(),
+                              activeColor: Colors.green,
+                              inactiveThumbColor: Colors.grey,
+                              inactiveTrackColor: Colors.grey.withValues(
+                                alpha: 0.3,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Desenho',
+                              style: TextStyle(
+                                color: controller.isDrawingMode.value
+                                    ? Colors.white
+                                    : Colors.grey,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.draw,
+                              color: controller.isDrawingMode.value
+                                  ? Colors.white
+                                  : Colors.grey,
+                              size: 16,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
                     // Rotation Quick Buttons (when image is selected)
                     if (controller.selectedImagePath.value.isNotEmpty)
                       const SizedBox(height: 12),
@@ -330,6 +404,17 @@ class CameraOverlayScreen extends StatelessWidget {
                             backgroundColor: Colors.purple,
                             child: const Icon(Icons.flip, size: 20),
                           ),
+
+                          // Fine Tune Dimensions Button
+                          FloatingActionButton.small(
+                            heroTag: 'fine_tune_dimensions',
+                            onPressed: controller.showDimensionsModal,
+                            backgroundColor: Colors.teal,
+                            child: const Icon(
+                              Icons.photo_size_select_large,
+                              size: 20,
+                            ),
+                          ),
                         ],
                       ),
                   ],
@@ -352,6 +437,66 @@ class CameraOverlayScreen extends StatelessWidget {
                       style: TextStyle(color: Colors.white, fontSize: 16),
                       textAlign: TextAlign.center,
                     ),
+                  ),
+                ),
+              ),
+
+            // Mode and Zoom Status (when image is selected)
+            if (controller.selectedImagePath.value.isNotEmpty)
+              Positioned(
+                top: 100,
+                left: 20,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: controller.isDrawingMode.value
+                          ? Colors.green
+                          : Colors.blue,
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        controller.isDrawingMode.value
+                            ? Icons.draw
+                            : Icons.tune,
+                        color: controller.isDrawingMode.value
+                            ? Colors.green
+                            : Colors.blue,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        controller.isDrawingMode.value
+                            ? 'Modo Desenho'
+                            : 'Modo Ajuste',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (controller.isDrawingMode.value) ...[
+                        const SizedBox(width: 8),
+                        Icon(Icons.zoom_in, color: Colors.grey[300], size: 12),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${controller.cameraZoom.value.toStringAsFixed(1)}x',
+                          style: TextStyle(
+                            color: Colors.grey[300],
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),

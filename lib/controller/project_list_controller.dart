@@ -111,7 +111,10 @@ class ProjectListController extends GetxController {
     _projectService.setLastProjectId(project.id);
 
     // Navega para a tela de câmera passando o projeto
-    Get.to(() => CameraOverlayScreen(project: project));
+    Get.to(() => CameraOverlayScreen(project: project))?.then((_) {
+      // Quando volta da tela de câmera, recarrega os projetos
+      loadProjects();
+    });
   }
 
   // Deleta um projeto
