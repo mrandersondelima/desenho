@@ -24,6 +24,11 @@ class CameraOverlayController extends GetxController {
   // Modo de interação: true = modo desenho, false = modo ajuste
   RxBool isDrawingMode = false.obs;
 
+  // Toggle para transparência automática (apenas no modo desenho)
+  RxBool isAutoTransparencyEnabled = false.obs;
+  RxDouble autoTransparencyValue = 0.5.obs; // Valor atual da animação
+  double _maxTransparencyValue = 0.5; // Valor máximo definido pelo slider
+
   // Zoom da câmera
   RxDouble cameraZoom = 1.0.obs;
   double _minCameraZoom = 1.0;
@@ -267,6 +272,12 @@ class CameraOverlayController extends GetxController {
     // Reset do zoom da câmera quando sai do modo desenho
     if (!isDrawingMode.value) {
       setCameraZoom(_minCameraZoom);
+
+      // Se sair do modo desenho, desabilita a transparência automática
+      if (isAutoTransparencyEnabled.value) {
+        isAutoTransparencyEnabled.value = false;
+        _stopAutoTransparencyAnimation();
+      }
     }
 
     _autoSave();
@@ -698,5 +709,71 @@ class CameraOverlayController extends GetxController {
         ), // Fechamento do Obx
       ),
     );
+  }
+
+  // Métodos para transparência automática
+  void toggleAutoTransparency() {
+    isAutoTransparencyEnabled.value = !isAutoTransparencyEnabled.value;
+    if (isAutoTransparencyEnabled.value) {
+      _startAutoTransparencyAnimation();
+    } else {
+      _stopAutoTransparencyAnimation();
+    }
+  }
+
+  void _startAutoTransparencyAnimation() {
+    if (!isDrawingMode.value) return; // Só funciona no modo desenho
+
+    _maxTransparencyValue = imageOpacity.value; // Salva o valor atual do slider
+    _animateTransparency();
+  }
+
+  void _stopAutoTransparencyAnimation() {
+    // Restaura a transparência para o valor definido no slider
+    autoTransparencyValue.value = _maxTransparencyValue;
+  }
+
+  void _animateTransparency() async {
+    if (!isAutoTransparencyEnabled.value || !isDrawingMode.value) return;
+
+    // Anima de 0 até o valor máximo
+    for (
+      double opacity = 0.0;
+      opacity <= _maxTransparencyValue;
+      opacity += 0.02
+    ) {
+      if (!isAutoTransparencyEnabled.value || !isDrawingMode.value) break;
+      autoTransparencyValue.value = opacity;
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+
+    // Anima do valor máximo até 0
+    for (
+      double opacity = _maxTransparencyValue;
+      opacity >= 0.0;
+      opacity -= 0.02
+    ) {
+      if (!isAutoTransparencyEnabled.value || !isDrawingMode.value) break;
+      autoTransparencyValue.value = opacity;
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+
+    // Repete a animação
+    if (isAutoTransparencyEnabled.value && isDrawingMode.value) {
+      _animateTransparency();
+    }
+  }
+
+  // Atualiza o valor máximo quando o slider de transparência muda
+  void updateImageOpacity(double value) {
+    imageOpacity.value = value;
+    _maxTransparencyValue = value;
+
+    // Se não está em modo auto, atualiza a transparência atual
+    if (!isAutoTransparencyEnabled.value) {
+      autoTransparencyValue.value = value;
+    }
+
+    _autoSave();
   }
 }

@@ -91,7 +91,7 @@ class CameraOverlayScreen extends StatelessWidget {
                             3.14159 /
                             180, // Converte graus para radianos
                         child: Opacity(
-                          opacity: controller.imageOpacity.value,
+                          opacity: controller.autoTransparencyValue.value,
                           child: Center(
                             child: Image.file(
                               File(controller.selectedImagePath.value),
@@ -138,12 +138,33 @@ class CameraOverlayScreen extends StatelessWidget {
                               max: 1.0,
                               activeColor: Colors.blue,
                               inactiveColor: Colors.grey,
-                              onChanged: controller.updateOpacity,
+                              onChanged: controller.updateImageOpacity,
                             ),
                           ),
                           Text(
                             '${(controller.imageOpacity.value * 100).round()}%',
                             style: const TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+
+                    // Auto-transparency toggle (only in drawing mode)
+                    if (controller.selectedImagePath.value.isNotEmpty &&
+                        controller.isDrawingMode.value)
+                      Row(
+                        children: [
+                          const Icon(Icons.auto_awesome, color: Colors.white),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Auto Transparência',
+                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                          const Spacer(),
+                          Switch(
+                            value: controller.isAutoTransparencyEnabled.value,
+                            activeColor: Colors.blue,
+                            onChanged: (value) =>
+                                controller.toggleAutoTransparency(),
                           ),
                         ],
                       ),
