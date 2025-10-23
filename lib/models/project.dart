@@ -15,6 +15,10 @@ class Project {
   final double imageRotation;
   final bool showOverlayImage;
 
+  // Posições da câmera (para sincronização no modo desenho)
+  final double cameraPositionX;
+  final double cameraPositionY;
+
   const Project({
     required this.id,
     required this.name,
@@ -27,6 +31,8 @@ class Project {
     this.imageScale = 1.0,
     this.imageRotation = 0.0,
     this.showOverlayImage = true,
+    this.cameraPositionX = 0.0,
+    this.cameraPositionY = 0.0,
   });
 
   // Construtor para criar um novo projeto
@@ -58,6 +64,8 @@ class Project {
     double? imageScale,
     double? imageRotation,
     bool? showOverlayImage,
+    double? cameraPositionX,
+    double? cameraPositionY,
   }) {
     return Project(
       id: id ?? this.id,
@@ -71,6 +79,8 @@ class Project {
       imageScale: imageScale ?? this.imageScale,
       imageRotation: imageRotation ?? this.imageRotation,
       showOverlayImage: showOverlayImage ?? this.showOverlayImage,
+      cameraPositionX: cameraPositionX ?? this.cameraPositionX,
+      cameraPositionY: cameraPositionY ?? this.cameraPositionY,
     );
   }
 
@@ -88,6 +98,8 @@ class Project {
       'imageScale': imageScale,
       'imageRotation': imageRotation,
       'showOverlayImage': showOverlayImage,
+      'cameraPositionX': cameraPositionX,
+      'cameraPositionY': cameraPositionY,
     };
   }
 
@@ -107,6 +119,8 @@ class Project {
       imageScale: (map['imageScale'] ?? 1.0).toDouble(),
       imageRotation: (map['imageRotation'] ?? 0.0).toDouble(),
       showOverlayImage: map['showOverlayImage'] ?? true,
+      cameraPositionX: (map['cameraPositionX'] ?? 0.0).toDouble(),
+      cameraPositionY: (map['cameraPositionY'] ?? 0.0).toDouble(),
     );
   }
 
@@ -119,7 +133,7 @@ class Project {
 
   @override
   String toString() {
-    return 'Project(id: $id, name: $name, createdAt: $createdAt, lastModified: $lastModified, overlayImagePath: $overlayImagePath, imageOpacity: $imageOpacity, imagePositionX: $imagePositionX, imagePositionY: $imagePositionY, imageScale: $imageScale, imageRotation: $imageRotation, showOverlayImage: $showOverlayImage)';
+    return 'Project(id: $id, name: $name, createdAt: $createdAt, lastModified: $lastModified, overlayImagePath: $overlayImagePath, imageOpacity: $imageOpacity, imagePositionX: $imagePositionX, imagePositionY: $imagePositionY, imageScale: $imageScale, imageRotation: $imageRotation, showOverlayImage: $showOverlayImage, cameraPositionX: $cameraPositionX, cameraPositionY: $cameraPositionY)';
   }
 
   @override
@@ -137,7 +151,9 @@ class Project {
         other.imagePositionY == imagePositionY &&
         other.imageScale == imageScale &&
         other.imageRotation == imageRotation &&
-        other.showOverlayImage == showOverlayImage;
+        other.showOverlayImage == showOverlayImage &&
+        other.cameraPositionX == cameraPositionX &&
+        other.cameraPositionY == cameraPositionY;
   }
 
   @override
@@ -152,7 +168,9 @@ class Project {
         imagePositionY.hashCode ^
         imageScale.hashCode ^
         imageRotation.hashCode ^
-        showOverlayImage.hashCode;
+        showOverlayImage.hashCode ^
+        cameraPositionX.hashCode ^
+        cameraPositionY.hashCode;
   }
 
   // Getters de conveniência

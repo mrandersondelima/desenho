@@ -21,6 +21,10 @@ class CameraOverlayController extends GetxController {
   RxDouble imageRotation = 0.0.obs; // Nova variável para rotação
   RxBool showOverlayImage = true.obs;
 
+  // Posição da câmera (para sincronização no modo desenho)
+  RxDouble cameraPositionX = 0.0.obs;
+  RxDouble cameraPositionY = 0.0.obs;
+
   // Modo de interação: true = modo desenho, false = modo ajuste
   RxBool isDrawingMode = false.obs;
 
@@ -57,11 +61,16 @@ class CameraOverlayController extends GetxController {
   double _initialX = 0.0;
   double _initialY = 0.0;
   double _initialCameraZoom = 1.0; // Zoom inicial da câmera para gestos
+  double _initialCameraX = 0.0; // Posição X inicial da câmera
+  double _initialCameraY = 0.0; // Posição Y inicial da câmera
 
   @override
   void onInit() {
     super.onInit();
     rotationTextController.text = '0';
+    // Inicializa autoTransparencyValue com o valor padrão da imageOpacity
+    autoTransparencyValue.value = imageOpacity.value;
+    _maxTransparencyValue = imageOpacity.value;
     initializeCamera();
   }
 
@@ -160,6 +169,10 @@ class CameraOverlayController extends GetxController {
         imageRotation.value = 0.0;
         rotationTextController.text = '0';
 
+        // Inicializa transparência com valor atual da opacidade
+        autoTransparencyValue.value = imageOpacity.value;
+        _maxTransparencyValue = imageOpacity.value;
+
         // Carrega dimensões da imagem
         await _loadImageDimensions();
 
@@ -219,6 +232,10 @@ class CameraOverlayController extends GetxController {
     _initialX = imagePositionX.value;
     _initialY = imagePositionY.value;
     _initialCameraZoom = cameraZoom.value; // Armazena zoom inicial da câmera
+    _initialCameraX =
+        cameraPositionX.value; // Armazena posição X inicial da câmera
+    _initialCameraY =
+        cameraPositionY.value; // Armazena posição Y inicial da câmera
   }
 
   void onScaleUpdate(ScaleUpdateDetails details) {
@@ -237,8 +254,12 @@ class CameraOverlayController extends GetxController {
       // Update position (drag) — calculate delta from start focal point
       final dx = details.focalPoint.dx - _startFocalPoint.dx;
       final dy = details.focalPoint.dy - _startFocalPoint.dy;
+
+      // Sincroniza posição da imagem e câmera
       imagePositionX.value = _initialX + dx;
       imagePositionY.value = _initialY + dy;
+      cameraPositionX.value = _initialCameraX + dx;
+      cameraPositionY.value = _initialCameraY + dy;
     } else {
       // Modo Ajuste: apenas a imagem é manipulada (comportamento original)
       final double newScale = (_initialScale * details.scale).clamp(0.2, 5.0);
@@ -269,9 +290,17 @@ class CameraOverlayController extends GetxController {
   void toggleDrawingMode() {
     isDrawingMode.value = !isDrawingMode.value;
 
-    // Reset do zoom da câmera quando sai do modo desenho
-    if (!isDrawingMode.value) {
+    if (isDrawingMode.value) {
+      // Quando entra no modo desenho, sincroniza câmera com imagem
+      cameraPositionX.value = imagePositionX.value;
+      cameraPositionY.value = imagePositionY.value;
+    } else {
+      // Reset do zoom da câmera quando sai do modo desenho
       setCameraZoom(_minCameraZoom);
+
+      // Reset da posição da câmera
+      cameraPositionX.value = 0.0;
+      cameraPositionY.value = 0.0;
 
       // Se sair do modo desenho, desabilita a transparência automática
       if (isAutoTransparencyEnabled.value) {
@@ -321,6 +350,14 @@ class CameraOverlayController extends GetxController {
     imageRotation.value = projectToLoad.imageRotation;
     showOverlayImage.value = projectToLoad.showOverlayImage;
 
+    // Carrega posições da câmera
+    cameraPositionX.value = projectToLoad.cameraPositionX;
+    cameraPositionY.value = projectToLoad.cameraPositionY;
+
+    // Inicializa autoTransparencyValue com o valor da imageOpacity
+    autoTransparencyValue.value = projectToLoad.imageOpacity;
+    _maxTransparencyValue = projectToLoad.imageOpacity;
+
     // Atualiza o controller de texto
     rotationTextController.text = projectToLoad.imageRotation
         .toInt()
@@ -342,6 +379,8 @@ class CameraOverlayController extends GetxController {
         imageScale: imageScale.value,
         imageRotation: imageRotation.value,
         showOverlayImage: showOverlayImage.value,
+        cameraPositionX: cameraPositionX.value,
+        cameraPositionY: cameraPositionY.value,
         lastModified: DateTime.now(),
       );
 
@@ -399,6 +438,14 @@ class CameraOverlayController extends GetxController {
     imageRotation.value = 0.0;
     imageOpacity.value = 0.5;
     rotationTextController.text = '0';
+
+    // Reset das posições da câmera
+    cameraPositionX.value = 0.0;
+    cameraPositionY.value = 0.0;
+
+    // Reset da transparência automática
+    autoTransparencyValue.value = 0.5;
+    _maxTransparencyValue = 0.5;
 
     // Reset do zoom da câmera também
     resetCameraZoom();

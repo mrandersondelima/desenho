@@ -65,9 +65,15 @@ class CameraOverlayScreen extends StatelessWidget {
 
         return Stack(
           children: [
-            // Camera Preview - Versão simplificada
+            // Camera Preview com posicionamento
             Positioned.fill(
-              child: CameraPreview(controller.cameraController.value!),
+              child: Transform.translate(
+                offset: Offset(
+                  controller.cameraPositionX.value,
+                  controller.cameraPositionY.value,
+                ),
+                child: CameraPreview(controller.cameraController.value!),
+              ),
             ),
 
             // Overlay Image
@@ -518,26 +524,6 @@ class CameraOverlayScreen extends StatelessWidget {
                         ),
                       ],
                     ],
-                  ),
-                ),
-              ),
-
-            // Image manipulation instructions
-            if (controller.selectedImagePath.value.isNotEmpty &&
-                controller.showOverlayImage.value)
-              const Positioned(
-                top: 50,
-                left: 20,
-                right: 20,
-                child: Card(
-                  color: Colors.black54,
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text(
-                      'Arraste para mover • Pinça para redimensionar • Slider/campo de texto para rotação • Botões roxos para rotação rápida',
-                      style: TextStyle(color: Colors.white, fontSize: 14),
-                      textAlign: TextAlign.center,
-                    ),
                   ),
                 ),
               ),
