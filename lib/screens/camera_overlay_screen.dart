@@ -77,7 +77,7 @@ class CameraOverlayScreen extends StatelessWidget {
             ),
 
             // Overlay Image
-            if (controller.selectedImagePath.value.isNotEmpty &&
+            if (controller.hasOverlayImages &&
                 controller.showOverlayImage.value)
               Positioned.fill(
                 child: GestureDetector(
@@ -100,7 +100,7 @@ class CameraOverlayScreen extends StatelessWidget {
                           opacity: controller.autoTransparencyValue.value,
                           child: Center(
                             child: Image.file(
-                              File(controller.selectedImagePath.value),
+                              File(controller.selectedImagePath),
                               fit: BoxFit.contain,
                             ),
                           ),
@@ -131,8 +131,58 @@ class CameraOverlayScreen extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Image Selection Slider (só aparece se houver múltiplas imagens)
+                    if (controller.overlayImagePaths.length > 1)
+                      Column(
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.layers, color: Colors.white),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Imagem ${controller.currentImageIndex.value + 1} de ${controller.overlayImagePaths.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.image, color: Colors.white),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Slider(
+                                  value: controller.currentImageIndex.value
+                                      .toDouble(),
+                                  min: 0,
+                                  max: (controller.overlayImagePaths.length - 1)
+                                      .toDouble(),
+                                  divisions:
+                                      controller.overlayImagePaths.length - 1,
+                                  activeColor: Colors.green,
+                                  inactiveColor: Colors.grey,
+                                  onChanged: (value) {
+                                    controller.selectImageByIndex(
+                                      value.round(),
+                                    );
+                                  },
+                                ),
+                              ),
+                              Text(
+                                '${controller.currentImageIndex.value + 1}',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+
                     // Opacity Slider
-                    if (controller.selectedImagePath.value.isNotEmpty)
+                    if (controller.hasOverlayImages)
                       Row(
                         children: [
                           const Icon(Icons.opacity, color: Colors.white),
@@ -155,7 +205,7 @@ class CameraOverlayScreen extends StatelessWidget {
                       ),
 
                     // Auto-transparency toggle (only in drawing mode)
-                    if (controller.selectedImagePath.value.isNotEmpty &&
+                    if (controller.hasOverlayImages &&
                         controller.isDrawingMode.value)
                       Row(
                         children: [
@@ -176,7 +226,7 @@ class CameraOverlayScreen extends StatelessWidget {
                       ),
 
                     // Rotation Slider and Text Input
-                    if (controller.selectedImagePath.value.isNotEmpty)
+                    if (controller.hasOverlayImages)
                       Column(
                         children: [
                           Row(
@@ -285,12 +335,42 @@ class CameraOverlayScreen extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        // Pick Image Button
-                        FloatingActionButton(
-                          heroTag: 'pick_image',
-                          onPressed: controller.pickImage,
-                          backgroundColor: Colors.blue,
-                          child: const Icon(Icons.image),
+                        // Pick Image Button (com suporte a múltiplas imagens)
+                        GestureDetector(
+                          onTap: controller.pickImage,
+                          onLongPress: controller.pickMultipleImagesFromGallery,
+                          child: FloatingActionButton(
+                            heroTag: 'pick_image',
+                            onPressed: null, // Usa GestureDetector ao invés
+                            backgroundColor: Colors.blue,
+                            child: Stack(
+                              children: [
+                                const Center(
+                                  child: Icon(Icons.image, color: Colors.white),
+                                ),
+                                if (controller.overlayImagePaths.length > 1)
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Text(
+                                        '${controller.overlayImagePaths.length}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ),
 
                         // Switch Camera Button
@@ -306,7 +386,7 @@ class CameraOverlayScreen extends StatelessWidget {
                         ),
 
                         // Toggle Overlay Button
-                        if (controller.selectedImagePath.value.isNotEmpty)
+                        if (controller.hasOverlayImages)
                           FloatingActionButton(
                             heroTag: 'toggle_overlay',
                             onPressed: controller.toggleOverlayVisibility,
@@ -321,7 +401,7 @@ class CameraOverlayScreen extends StatelessWidget {
                           ),
 
                         // Reset Transform Button
-                        if (controller.selectedImagePath.value.isNotEmpty)
+                        if (controller.hasOverlayImages)
                           FloatingActionButton(
                             heroTag: 'reset_transform',
                             onPressed: controller.resetImageTransform,
@@ -332,7 +412,7 @@ class CameraOverlayScreen extends StatelessWidget {
                     ),
 
                     // Mode Toggle (when image is selected)
-                    if (controller.selectedImagePath.value.isNotEmpty) ...[
+                    if (controller.hasOverlayImages) ...[
                       const SizedBox(height: 16),
 
                       // Mode Toggle Switch
@@ -402,9 +482,8 @@ class CameraOverlayScreen extends StatelessWidget {
                     ],
 
                     // Rotation Quick Buttons (when image is selected)
-                    if (controller.selectedImagePath.value.isNotEmpty)
-                      const SizedBox(height: 12),
-                    if (controller.selectedImagePath.value.isNotEmpty)
+                    if (controller.hasOverlayImages) const SizedBox(height: 12),
+                    if (controller.hasOverlayImages)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
@@ -450,7 +529,7 @@ class CameraOverlayScreen extends StatelessWidget {
             ),
 
             // Instructions
-            if (controller.selectedImagePath.value.isEmpty)
+            if (!controller.hasOverlayImages)
               const Positioned(
                 top: 100,
                 left: 20,
@@ -469,7 +548,7 @@ class CameraOverlayScreen extends StatelessWidget {
               ),
 
             // Mode and Zoom Status (when image is selected)
-            if (controller.selectedImagePath.value.isNotEmpty)
+            if (controller.hasOverlayImages)
               Positioned(
                 top: 100,
                 left: 20,

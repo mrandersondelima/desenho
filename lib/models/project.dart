@@ -6,8 +6,9 @@ class Project {
   final DateTime createdAt;
   final DateTime lastModified;
 
-  // Configurações da imagem sobreposta
-  final String? overlayImagePath;
+  // Configurações das imagens sobrepostas
+  final List<String> overlayImagePaths; // Lista de caminhos das imagens
+  final int currentImageIndex; // Índice da imagem atualmente exibida
   final double imageOpacity;
   final double imagePositionX;
   final double imagePositionY;
@@ -18,13 +19,13 @@ class Project {
   // Posições da câmera (para sincronização no modo desenho)
   final double cameraPositionX;
   final double cameraPositionY;
-
   const Project({
     required this.id,
     required this.name,
     required this.createdAt,
     required this.lastModified,
-    this.overlayImagePath,
+    this.overlayImagePaths = const [],
+    this.currentImageIndex = 0,
     this.imageOpacity = 0.5,
     this.imagePositionX = 0.0,
     this.imagePositionY = 0.0,
@@ -57,7 +58,8 @@ class Project {
     String? name,
     DateTime? createdAt,
     DateTime? lastModified,
-    String? overlayImagePath,
+    List<String>? overlayImagePaths,
+    int? currentImageIndex,
     double? imageOpacity,
     double? imagePositionX,
     double? imagePositionY,
@@ -72,7 +74,8 @@ class Project {
       name: name ?? this.name,
       createdAt: createdAt ?? this.createdAt,
       lastModified: lastModified ?? DateTime.now(),
-      overlayImagePath: overlayImagePath ?? this.overlayImagePath,
+      overlayImagePaths: overlayImagePaths ?? this.overlayImagePaths,
+      currentImageIndex: currentImageIndex ?? this.currentImageIndex,
       imageOpacity: imageOpacity ?? this.imageOpacity,
       imagePositionX: imagePositionX ?? this.imagePositionX,
       imagePositionY: imagePositionY ?? this.imagePositionY,
@@ -91,7 +94,8 @@ class Project {
       'name': name,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'lastModified': lastModified.millisecondsSinceEpoch,
-      'overlayImagePath': overlayImagePath,
+      'overlayImagePaths': overlayImagePaths,
+      'currentImageIndex': currentImageIndex,
       'imageOpacity': imageOpacity,
       'imagePositionX': imagePositionX,
       'imagePositionY': imagePositionY,
@@ -112,7 +116,8 @@ class Project {
       lastModified: DateTime.fromMillisecondsSinceEpoch(
         map['lastModified'] ?? 0,
       ),
-      overlayImagePath: map['overlayImagePath'],
+      overlayImagePaths: List<String>.from(map['overlayImagePaths'] ?? []),
+      currentImageIndex: map['currentImageIndex']?.toInt() ?? 0,
       imageOpacity: (map['imageOpacity'] ?? 0.5).toDouble(),
       imagePositionX: (map['imagePositionX'] ?? 0.0).toDouble(),
       imagePositionY: (map['imagePositionY'] ?? 0.0).toDouble(),
@@ -133,7 +138,7 @@ class Project {
 
   @override
   String toString() {
-    return 'Project(id: $id, name: $name, createdAt: $createdAt, lastModified: $lastModified, overlayImagePath: $overlayImagePath, imageOpacity: $imageOpacity, imagePositionX: $imagePositionX, imagePositionY: $imagePositionY, imageScale: $imageScale, imageRotation: $imageRotation, showOverlayImage: $showOverlayImage, cameraPositionX: $cameraPositionX, cameraPositionY: $cameraPositionY)';
+    return 'Project(id: $id, name: $name, createdAt: $createdAt, lastModified: $lastModified, overlayImagePaths: $overlayImagePaths, currentImageIndex: $currentImageIndex, imageOpacity: $imageOpacity, imagePositionX: $imagePositionX, imagePositionY: $imagePositionY, imageScale: $imageScale, imageRotation: $imageRotation, showOverlayImage: $showOverlayImage, cameraPositionX: $cameraPositionX, cameraPositionY: $cameraPositionY)';
   }
 
   @override
@@ -145,7 +150,8 @@ class Project {
         other.name == name &&
         other.createdAt == createdAt &&
         other.lastModified == lastModified &&
-        other.overlayImagePath == overlayImagePath &&
+        _listEquals(other.overlayImagePaths, overlayImagePaths) &&
+        other.currentImageIndex == currentImageIndex &&
         other.imageOpacity == imageOpacity &&
         other.imagePositionX == imagePositionX &&
         other.imagePositionY == imagePositionY &&
@@ -156,13 +162,24 @@ class Project {
         other.cameraPositionY == cameraPositionY;
   }
 
+  // Helper function para comparar listas
+  bool _listEquals<T>(List<T>? a, List<T>? b) {
+    if (a == null) return b == null;
+    if (b == null || a.length != b.length) return false;
+    for (int index = 0; index < a.length; index += 1) {
+      if (a[index] != b[index]) return false;
+    }
+    return true;
+  }
+
   @override
   int get hashCode {
     return id.hashCode ^
         name.hashCode ^
         createdAt.hashCode ^
         lastModified.hashCode ^
-        overlayImagePath.hashCode ^
+        overlayImagePaths.hashCode ^
+        currentImageIndex.hashCode ^
         imageOpacity.hashCode ^
         imagePositionX.hashCode ^
         imagePositionY.hashCode ^
@@ -174,8 +191,12 @@ class Project {
   }
 
   // Getters de conveniência
-  bool get hasOverlayImage =>
-      overlayImagePath != null && overlayImagePath!.isNotEmpty;
+  bool get hasOverlayImage => overlayImagePaths.isNotEmpty;
+
+  String? get currentImagePath =>
+      hasOverlayImage && currentImageIndex < overlayImagePaths.length
+      ? overlayImagePaths[currentImageIndex]
+      : null;
 
   String get formattedCreatedAt {
     return '${createdAt.day.toString().padLeft(2, '0')}/${createdAt.month.toString().padLeft(2, '0')}/${createdAt.year}';

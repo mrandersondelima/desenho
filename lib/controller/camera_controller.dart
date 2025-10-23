@@ -13,7 +13,20 @@ class CameraOverlayController extends GetxController {
   Rx<CameraController?> cameraController = Rx<CameraController?>(null);
   RxBool isCameraInitialized = false.obs;
   RxBool isLoading = true.obs;
-  RxString selectedImagePath = ''.obs;
+
+  // Lista de imagens sobrepostas
+  RxList<String> overlayImagePaths = <String>[].obs;
+  RxInt currentImageIndex = 0.obs;
+
+  // Getter para compatibilidade com código existente
+  String get selectedImagePath =>
+      overlayImagePaths.isNotEmpty &&
+          currentImageIndex.value < overlayImagePaths.length
+      ? overlayImagePaths[currentImageIndex.value]
+      : '';
+
+  bool get hasOverlayImages => overlayImagePaths.isNotEmpty;
+
   RxDouble imageOpacity = 0.5.obs;
   RxDouble imagePositionX = 0.0.obs;
   RxDouble imagePositionY = 0.0.obs;
@@ -161,22 +174,161 @@ class CameraOverlayController extends GetxController {
       );
 
       if (result != null) {
-        selectedImagePath.value = result.files.single.path ?? '';
-        // Reset position and scale when new image is selected
-        imagePositionX.value = 0.0;
-        imagePositionY.value = 0.0;
-        imageScale.value = 1.0;
-        imageRotation.value = 0.0;
-        rotationTextController.text = '0';
+        final newImagePath = result.files.single.path ?? '';
+        if (newImagePath.isNotEmpty) {
+          // Valida compatibilidade de dimensões
+          final isCompatible = await _validateImageCompatibility(newImagePath);
 
-        // Inicializa transparência com valor atual da opacidade
-        autoTransparencyValue.value = imageOpacity.value;
-        _maxTransparencyValue = imageOpacity.value;
+          if (isCompatible) {
+            // Adiciona nova imagem à lista
+            overlayImagePaths.add(newImagePath);
+            currentImageIndex.value =
+                overlayImagePaths.length - 1; // Seleciona a nova imagem
 
-        // Carrega dimensões da imagem
-        await _loadImageDimensions();
+            // Reset position and scale when new image is selected
+            imagePositionX.value = 0.0;
+            imagePositionY.value = 0.0;
+            imageScale.value = 1.0;
+            imageRotation.value = 0.0;
+            rotationTextController.text = '0';
 
-        _autoSave();
+            // Inicializa transparência com valor atual da opacidade
+            autoTransparencyValue.value = imageOpacity.value;
+            _maxTransparencyValue = imageOpacity.value;
+
+            // Carrega dimensões da imagem
+            await _loadImageDimensions();
+
+            _autoSave();
+
+            Get.snackbar(
+              'Imagem adicionada',
+              'Imagem adicionada com sucesso',
+              backgroundColor: Colors.green,
+              colorText: Colors.white,
+              duration: const Duration(seconds: 2),
+            );
+          } else {
+            Get.snackbar(
+              'Imagem incompatível',
+              'Esta imagem tem dimensões diferentes das já selecionadas',
+              backgroundColor: Colors.orange,
+              colorText: Colors.white,
+              duration: const Duration(seconds: 3),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Erro ao selecionar imagem: $e');
+    }
+  }
+
+  // Métodos para gerenciar múltiplas imagens
+  void selectImageByIndex(int index) {
+    if (index >= 0 && index < overlayImagePaths.length) {
+      currentImageIndex.value = index;
+      _loadImageDimensions();
+      _autoSave();
+    }
+  }
+
+  void removeImageAtIndex(int index) {
+    if (index >= 0 && index < overlayImagePaths.length) {
+      overlayImagePaths.removeAt(index);
+
+      // Ajusta o índice atual se necessário
+      if (currentImageIndex.value >= overlayImagePaths.length) {
+        currentImageIndex.value = overlayImagePaths.length - 1;
+      }
+      if (currentImageIndex.value < 0) {
+        currentImageIndex.value = 0;
+      }
+
+      _autoSave();
+    }
+  }
+
+  void clearAllImages() {
+    overlayImagePaths.clear();
+    currentImageIndex.value = 0;
+    _autoSave();
+  }
+
+  // Permite selecionar múltiplas imagens de uma vez
+  Future<void> pickMultipleImagesFromGallery() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true, // Permite múltiplas seleções
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        List<String> validImages = [];
+        List<String> invalidImages = [];
+
+        // Valida cada imagem selecionada
+        for (var file in result.files) {
+          if (file.path != null && file.path!.isNotEmpty) {
+            // Valida compatibilidade de dimensões
+            final isCompatible = await _validateImageCompatibility(file.path!);
+
+            if (isCompatible) {
+              validImages.add(file.path!);
+            } else {
+              invalidImages.add(file.name);
+            }
+          }
+        }
+
+        // Adiciona apenas as imagens válidas
+        if (validImages.isNotEmpty) {
+          overlayImagePaths.addAll(validImages);
+
+          // Seleciona a primeira nova imagem
+          if (overlayImagePaths.isNotEmpty) {
+            currentImageIndex.value =
+                overlayImagePaths.length - validImages.length;
+
+            // Reset das transformações para a primeira imagem
+            imagePositionX.value = 0.0;
+            imagePositionY.value = 0.0;
+            imageScale.value = 1.0;
+            imageRotation.value = 0.0;
+            rotationTextController.text = '0';
+
+            // Inicializa transparência
+            autoTransparencyValue.value = imageOpacity.value;
+            _maxTransparencyValue = imageOpacity.value;
+
+            // Carrega dimensões da primeira imagem
+            await _loadImageDimensions();
+
+            _autoSave();
+          }
+        }
+
+        // Mostra mensagens sobre o resultado
+        if (invalidImages.isNotEmpty) {
+          Get.snackbar(
+            'Imagens incompatíveis',
+            'As seguintes imagens têm dimensões diferentes e não foram adicionadas:\n${invalidImages.join(', ')}',
+            backgroundColor: Colors.orange,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 4),
+            maxWidth: 350,
+          );
+        }
+
+        if (validImages.isNotEmpty) {
+          Get.snackbar(
+            'Imagens adicionadas',
+            '${validImages.length} imagem(ns) adicionada(s) com sucesso',
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+          );
+        }
       }
     } catch (e) {
       Get.snackbar('Erro', 'Erro ao selecionar imagem: $e');
@@ -337,9 +489,10 @@ class CameraOverlayController extends GetxController {
     currentProject.value = projectToLoad;
 
     // Carrega as configurações do projeto
-    if (projectToLoad.overlayImagePath != null &&
-        projectToLoad.overlayImagePath!.isNotEmpty) {
-      selectedImagePath.value = projectToLoad.overlayImagePath!;
+    overlayImagePaths.value = projectToLoad.overlayImagePaths;
+    currentImageIndex.value = projectToLoad.currentImageIndex;
+
+    if (overlayImagePaths.isNotEmpty) {
       // Carrega dimensões da imagem quando carrega projeto
       _loadImageDimensions();
     }
@@ -370,9 +523,8 @@ class CameraOverlayController extends GetxController {
 
       // Atualiza o projeto com as configurações atuais
       final updatedProject = currentProject.value!.copyWith(
-        overlayImagePath: selectedImagePath.value.isNotEmpty
-            ? selectedImagePath.value
-            : null,
+        overlayImagePaths: overlayImagePaths.toList(),
+        currentImageIndex: currentImageIndex.value,
         imageOpacity: imageOpacity.value,
         imagePositionX: imagePositionX.value,
         imagePositionY: imagePositionY.value,
@@ -455,9 +607,9 @@ class CameraOverlayController extends GetxController {
 
   // Carrega as dimensões da imagem selecionada
   Future<void> _loadImageDimensions() async {
-    if (selectedImagePath.value.isNotEmpty) {
+    if (selectedImagePath.isNotEmpty) {
       try {
-        final imageFile = File(selectedImagePath.value);
+        final imageFile = File(selectedImagePath);
         final imageBytes = await imageFile.readAsBytes();
         final image = await decodeImageFromList(imageBytes);
 
@@ -516,7 +668,7 @@ class CameraOverlayController extends GetxController {
 
   // Exibe modal para ajuste fino de dimensões
   Future<void> showDimensionsModal() async {
-    if (selectedImagePath.value.isEmpty) {
+    if (selectedImagePath.isEmpty) {
       Get.snackbar('Erro', 'Selecione uma imagem primeiro');
       return;
     }
@@ -809,6 +961,50 @@ class CameraOverlayController extends GetxController {
     if (isAutoTransparencyEnabled.value && isDrawingMode.value) {
       _animateTransparency();
     }
+  }
+
+  // Método helper para obter dimensões de uma imagem
+  Future<Size?> _getImageDimensions(String imagePath) async {
+    try {
+      final imageFile = File(imagePath);
+      if (!await imageFile.exists()) return null;
+
+      final bytes = await imageFile.readAsBytes();
+      final decodedImage = await decodeImageFromList(bytes);
+      return Size(
+        decodedImage.width.toDouble(),
+        decodedImage.height.toDouble(),
+      );
+    } catch (e) {
+      print('Erro ao obter dimensões da imagem: $e');
+      return null;
+    }
+  }
+
+  // Verifica se duas imagens têm dimensões compatíveis (tolerância de 5%)
+  bool _areImageDimensionsCompatible(Size size1, Size size2) {
+    const double tolerance = 0.05; // 5% de tolerância
+
+    final double widthDiff = (size1.width - size2.width).abs() / size1.width;
+    final double heightDiff =
+        (size1.height - size2.height).abs() / size1.height;
+
+    return widthDiff <= tolerance && heightDiff <= tolerance;
+  }
+
+  // Valida se uma nova imagem é compatível com as existentes
+  Future<bool> _validateImageCompatibility(String newImagePath) async {
+    if (overlayImagePaths.isEmpty)
+      return true; // Primeira imagem sempre é válida
+
+    final newImageSize = await _getImageDimensions(newImagePath);
+    if (newImageSize == null) return false;
+
+    // Verifica compatibilidade com a primeira imagem da lista
+    final firstImageSize = await _getImageDimensions(overlayImagePaths.first);
+    if (firstImageSize == null) return false;
+
+    return _areImageDimensionsCompatible(firstImageSize, newImageSize);
   }
 
   // Atualiza o valor máximo quando o slider de transparência muda

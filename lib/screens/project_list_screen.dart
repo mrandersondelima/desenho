@@ -208,7 +208,7 @@ class ProjectListScreen extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const Spacer(),
-                if (project.overlayImagePath != null)
+                if (project.hasOverlayImage)
                   Row(
                     children: [
                       Icon(Icons.image, size: 12, color: Colors.grey[500]),
@@ -257,11 +257,11 @@ class ProjectListScreen extends StatelessWidget {
             const SizedBox(height: 4),
             Row(
               children: [
-                if (project.overlayImagePath != null) ...[
+                if (project.hasOverlayImage) ...[
                   Icon(Icons.image, size: 14, color: Colors.green),
                   const SizedBox(width: 4),
                   Text(
-                    'Com imagem',
+                    '${project.overlayImagePaths.length} imagem${project.overlayImagePaths.length > 1 ? 's' : ''}',
                     style: TextStyle(fontSize: 11, color: Colors.green),
                   ),
                   const SizedBox(width: 12),
