@@ -21,7 +21,7 @@ class CameraOverlayScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white10,
       body: Obx(() {
         if (controller.isLoading.value) {
           return const Center(
@@ -41,6 +41,9 @@ class CameraOverlayScreen extends StatelessWidget {
 
         return Stack(
           children: [
+            // Fundo branco para quando a câmera ficar menor que a tela
+            Positioned.fill(child: Container(color: Colors.white)),
+
             // Camera Preview com posicionamento e escala
             Positioned.fill(
               child: Transform.translate(

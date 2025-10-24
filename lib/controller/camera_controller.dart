@@ -655,26 +655,30 @@ class CameraOverlayController extends GetxController {
       final double newScale = (_initialScale * details.scale).clamp(0.2, 5.0);
       imageScale.value = newScale;
 
-      // Sincronização perfeita com comportamento híbrido:
-      // - Para zoom >= 1.0: usa zoom da câmera
-      // - Para zoom < 1.0: mantém câmera no mínimo e usa escala da preview
+      // Sincronização perfeita: sempre usa cameraScale igual ao imageScale para perfeita sincronia
+      // O zoom da câmera é ajustado para compensar e evitar zoom duplo
+      cameraScale.value = newScale;
+
       if (newScale >= 1.0) {
-        // Mapeia zoom da imagem (1.0 a 5.0) para o range da câmera
+        // Para zoom >= 1.0: usa zoom da câmera reduzido para compensar o cameraScale
         final double imageZoomRange = 5.0 - 1.0; // 4.0
         final double cameraZoomRange = _maxCameraZoom - _minCameraZoom;
         final double normalizedImageZoom =
             (newScale - 1.0) / imageZoomRange; // 0.0 a 1.0
-        final double targetCameraZoom =
-            _minCameraZoom + (normalizedImageZoom * cameraZoomRange);
-        setCameraZoom(targetCameraZoom);
-        cameraScale.value = 1.0; // Preview em escala normal
-      } else {
-        // Para zoom < 1.0: câmera no zoom mínimo e escala a preview
-        setCameraZoom(_minCameraZoom);
-        cameraScale.value = newScale; // Escala a preview junto com a imagem
-      }
 
-      // No modo desenho, sempre permite movimento (pan e drag)
+        // Calcula zoom da câmera compensado para evitar zoom duplo
+        final double baseCameraZoom =
+            _minCameraZoom + (normalizedImageZoom * cameraZoomRange);
+        final double compensatedCameraZoom =
+            baseCameraZoom / newScale; // Compensa o cameraScale
+
+        setCameraZoomSync(
+          compensatedCameraZoom.clamp(_minCameraZoom, _maxCameraZoom),
+        );
+      } else {
+        // Para zoom < 1.0: câmera no zoom mínimo
+        setCameraZoomSync(_minCameraZoom);
+      } // No modo desenho, sempre permite movimento (pan e drag)
       // Update position (drag) — calculate delta from start focal point
       final dx = details.focalPoint.dx - _startFocalPoint.dx;
       final dy = details.focalPoint.dy - _startFocalPoint.dy;
@@ -716,24 +720,29 @@ class CameraOverlayController extends GetxController {
 
   // Métodos de controle de zoom da câmera
   void _syncCameraZoomWithImage() {
-    // Sincronização perfeita com comportamento híbrido:
-    // - Para zoom >= 1.0: usa zoom da câmera
-    // - Para zoom < 1.0: mantém câmera no mínimo e usa escala da preview
+    // Sincronização perfeita: sempre usa cameraScale igual ao imageScale para perfeita sincronia
+    // O zoom da câmera é ajustado para compensar e evitar zoom duplo
+    cameraScale.value = imageScale.value;
+
     if (imageScale.value >= 1.0) {
-      // Mapeia zoom da imagem (1.0 a 5.0) para o range da câmera
+      // Para zoom >= 1.0: usa zoom da câmera reduzido para compensar o cameraScale
       final double imageZoomRange = 5.0 - 1.0; // 4.0
       final double cameraZoomRange = _maxCameraZoom - _minCameraZoom;
       final double normalizedImageZoom =
           (imageScale.value - 1.0) / imageZoomRange; // 0.0 a 1.0
-      final double targetCameraZoom =
+
+      // Calcula zoom da câmera compensado para evitar zoom duplo
+      final double baseCameraZoom =
           _minCameraZoom + (normalizedImageZoom * cameraZoomRange);
-      setCameraZoom(targetCameraZoom);
-      cameraScale.value = 1.0; // Preview em escala normal
+      final double compensatedCameraZoom =
+          baseCameraZoom / imageScale.value; // Compensa o cameraScale
+
+      setCameraZoomSync(
+        compensatedCameraZoom.clamp(_minCameraZoom, _maxCameraZoom),
+      );
     } else {
-      // Para zoom < 1.0: câmera no zoom mínimo e escala a preview
-      setCameraZoom(_minCameraZoom);
-      cameraScale.value =
-          imageScale.value; // Escala a preview junto com a imagem
+      // Para zoom < 1.0: câmera no zoom mínimo
+      setCameraZoomSync(_minCameraZoom);
     }
   }
 
@@ -741,11 +750,28 @@ class CameraOverlayController extends GetxController {
     if (cameraController.value != null && isCameraInitialized.value) {
       try {
         final clampedZoom = zoom.clamp(_minCameraZoom, _maxCameraZoom);
-        await cameraController.value!.setZoomLevel(clampedZoom);
+        // Atualiza imediatamente a variável observável para sincronização visual
         cameraZoom.value = clampedZoom;
+        // Aplica o zoom na câmera de forma assíncrona sem bloquear
+        cameraController.value!.setZoomLevel(clampedZoom).catchError((e) {
+          print('Erro ao aplicar zoom da câmera: $e');
+        });
       } catch (e) {
         print('Erro ao aplicar zoom da câmera: $e');
       }
+    }
+  }
+
+  // Versão síncrona para uso durante gestos - evita delay
+  void setCameraZoomSync(double zoom) {
+    if (cameraController.value != null && isCameraInitialized.value) {
+      final clampedZoom = zoom.clamp(_minCameraZoom, _maxCameraZoom);
+      // Atualiza imediatamente a variável observável
+      cameraZoom.value = clampedZoom;
+      // Aplica o zoom na câmera sem await para evitar delay
+      cameraController.value!.setZoomLevel(clampedZoom).catchError((e) {
+        print('Erro ao aplicar zoom da câmera: $e');
+      });
     }
   }
 
