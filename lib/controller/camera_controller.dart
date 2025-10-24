@@ -173,10 +173,11 @@ class CameraOverlayController extends GetxController {
         _stopAutoTransparencyAnimation();
       }
     } else {
-      // Modo Desenho ativado - reset das posições da câmera
+      // Modo Desenho ativado - reset das posições da câmera e sincroniza zoom
       cameraPositionX.value = 0.0;
       cameraPositionY.value = 0.0;
-      setCameraZoom(_minCameraZoom);
+      // Sincroniza zoom da câmera com o zoom atual da imagem
+      _syncCameraZoomWithImage();
     }
 
     _autoSave();
@@ -624,8 +625,9 @@ class CameraOverlayController extends GetxController {
   } // Gesture handlers for ScaleGestureRecognizer (covers pan + scale)
 
   void onScaleStart(ScaleStartDetails details) {
-    // Só permite movimentação se o botão "Mover Imagem" estiver ativo
-    if (!isImageMoveButtonActive.value) return;
+    // No modo desenho, permite inicializar gestos de zoom e movimento mesmo sem o botão "Mover Imagem" ativo
+    // No modo ajuste, só permite se o botão "Mover Imagem" estiver ativo
+    if (!isDrawingMode && !isImageMoveButtonActive.value) return;
 
     _startFocalPoint = details.focalPoint;
     _initialScale = imageScale.value;
@@ -638,28 +640,26 @@ class CameraOverlayController extends GetxController {
   }
 
   void onScaleUpdate(ScaleUpdateDetails details) {
-    // Só permite movimentação se o botão "Mover Imagem" estiver ativo
-    if (!isImageMoveButtonActive.value) return;
+    // No modo desenho, permite zoom e movimento mesmo sem o botão "Mover Imagem" ativo
+    // No modo ajuste, só permite manipulação se o botão "Mover Imagem" estiver ativo
+    if (!isDrawingMode && !isImageMoveButtonActive.value) return;
 
     if (isDrawingMode) {
-      // Modo Desenho: zoom na câmera e na imagem simultaneamente com sincronização refinada
+      // Modo Desenho: zoom na câmera e na imagem simultaneamente com sincronização perfeita
       final double newScale = (_initialScale * details.scale).clamp(0.2, 5.0);
       imageScale.value = newScale;
 
-      // Sincronização suave: apenas aplicar zoom na câmera quando a imagem está acima do zoom padrão (1.0)
-      if (newScale > 1.0) {
-        // Mapeia zoom da imagem acima de 1.0 para o range da câmera
-        final double zoomAboveDefault = newScale - 1.0; // 0.0 a 4.0
-        final double normalizedZoom = zoomAboveDefault / 4.0; // 0.0 a 1.0
-        final double targetCameraZoom =
-            _minCameraZoom +
-            (normalizedZoom * (_maxCameraZoom - _minCameraZoom));
-        setCameraZoom(targetCameraZoom);
-      } else {
-        // Se zoom da imagem <= 1.0, mantém câmera no zoom mínimo
-        setCameraZoom(_minCameraZoom);
-      }
+      // Sincronização perfeita: câmera acompanha proporcionalmente o zoom da imagem
+      // Mapeia o zoom da imagem (0.2 a 5.0) para o range da câmera (_minCameraZoom a _maxCameraZoom)
+      final double imageZoomRange = 5.0 - 0.2; // 4.8
+      final double cameraZoomRange = _maxCameraZoom - _minCameraZoom;
+      final double normalizedImageZoom =
+          (newScale - 0.2) / imageZoomRange; // 0.0 a 1.0
+      final double targetCameraZoom =
+          _minCameraZoom + (normalizedImageZoom * cameraZoomRange);
+      setCameraZoom(targetCameraZoom);
 
+      // No modo desenho, sempre permite movimento (pan e drag)
       // Update position (drag) — calculate delta from start focal point
       final dx = details.focalPoint.dx - _startFocalPoint.dx;
       final dy = details.focalPoint.dy - _startFocalPoint.dy;
@@ -686,8 +686,9 @@ class CameraOverlayController extends GetxController {
   }
 
   void onScaleEnd(ScaleEndDetails details) {
-    // Só permite salvamento se o botão "Mover Imagem" estiver ativo
-    if (!isImageMoveButtonActive.value) return;
+    // No modo desenho, sempre salva as alterações de zoom e movimento
+    // No modo ajuste, só salva se o botão "Mover Imagem" estiver ativo
+    if (!isDrawingMode && !isImageMoveButtonActive.value) return;
 
     // Salva após terminar o gesto
     _autoSave();
@@ -700,18 +701,15 @@ class CameraOverlayController extends GetxController {
 
   // Métodos de controle de zoom da câmera
   void _syncCameraZoomWithImage() {
-    // Sincronização suave: apenas aplicar zoom na câmera quando a imagem está acima do zoom padrão (1.0)
-    if (imageScale.value > 1.0) {
-      // Mapeia zoom da imagem acima de 1.0 para o range da câmera
-      final double zoomAboveDefault = imageScale.value - 1.0; // 0.0 a 4.0
-      final double normalizedZoom = zoomAboveDefault / 4.0; // 0.0 a 1.0
-      final double targetCameraZoom =
-          _minCameraZoom + (normalizedZoom * (_maxCameraZoom - _minCameraZoom));
-      setCameraZoom(targetCameraZoom);
-    } else {
-      // Se zoom da imagem <= 1.0, mantém câmera no zoom mínimo
-      setCameraZoom(_minCameraZoom);
-    }
+    // Sincronização perfeita: câmera acompanha proporcionalmente o zoom da imagem
+    // Mapeia o zoom da imagem (0.2 a 5.0) para o range da câmera (_minCameraZoom a _maxCameraZoom)
+    final double imageZoomRange = 5.0 - 0.2; // 4.8
+    final double cameraZoomRange = _maxCameraZoom - _minCameraZoom;
+    final double normalizedImageZoom =
+        (imageScale.value - 0.2) / imageZoomRange; // 0.0 a 1.0
+    final double targetCameraZoom =
+        _minCameraZoom + (normalizedImageZoom * cameraZoomRange);
+    setCameraZoom(targetCameraZoom);
   }
 
   Future<void> setCameraZoom(double zoom) async {
@@ -860,17 +858,17 @@ class CameraOverlayController extends GetxController {
     cameraPositionX.value = 0.0;
     cameraPositionY.value = 0.0;
 
-    // Se estiver no modo desenho, reset do zoom da câmera também
+    // Se estiver no modo desenho, sincroniza zoom da câmera com a imagem resetada (1.0)
     if (isDrawingMode) {
+      _syncCameraZoomWithImage();
+    } else {
+      // No modo ajuste, apenas reseta o zoom da câmera
       setCameraZoom(_minCameraZoom);
     }
 
     // Reset da transparência automática
     autoTransparencyValue.value = 0.5;
     _maxTransparencyValue = 0.5;
-
-    // Reset do zoom da câmera também
-    resetCameraZoom();
 
     _autoSave();
   }
