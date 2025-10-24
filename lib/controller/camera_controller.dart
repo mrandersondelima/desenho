@@ -76,6 +76,9 @@ class CameraOverlayController extends GetxController {
   double _minCameraZoom = 1.0;
   double _maxCameraZoom = 8.0;
 
+  // Escala adicional da câmera para quando zoom da imagem < 1.0
+  RxDouble cameraScale = 1.0.obs;
+
   // Projeto atual
   Rx<Project?> currentProject = Rx<Project?>(null);
   final ProjectService _projectService = ProjectService();
@@ -108,6 +111,8 @@ class CameraOverlayController extends GetxController {
     // Inicializa autoTransparencyValue com o valor padrão da imageOpacity
     autoTransparencyValue.value = imageOpacity.value;
     _maxTransparencyValue = imageOpacity.value;
+    // Inicializa cameraScale
+    cameraScale.value = 1.0;
     initializeCamera();
   }
 
@@ -166,6 +171,7 @@ class CameraOverlayController extends GetxController {
       cameraPositionX.value = 0.0;
       cameraPositionY.value = 0.0;
       setCameraZoom(_minCameraZoom);
+      cameraScale.value = 1.0;
 
       // Se estava em modo desenho, desabilita a transparência automática
       if (isAutoTransparencyEnabled.value) {
@@ -649,15 +655,24 @@ class CameraOverlayController extends GetxController {
       final double newScale = (_initialScale * details.scale).clamp(0.2, 5.0);
       imageScale.value = newScale;
 
-      // Sincronização perfeita: câmera acompanha proporcionalmente o zoom da imagem
-      // Mapeia o zoom da imagem (0.2 a 5.0) para o range da câmera (_minCameraZoom a _maxCameraZoom)
-      final double imageZoomRange = 5.0 - 0.2; // 4.8
-      final double cameraZoomRange = _maxCameraZoom - _minCameraZoom;
-      final double normalizedImageZoom =
-          (newScale - 0.2) / imageZoomRange; // 0.0 a 1.0
-      final double targetCameraZoom =
-          _minCameraZoom + (normalizedImageZoom * cameraZoomRange);
-      setCameraZoom(targetCameraZoom);
+      // Sincronização perfeita com comportamento híbrido:
+      // - Para zoom >= 1.0: usa zoom da câmera
+      // - Para zoom < 1.0: mantém câmera no mínimo e usa escala da preview
+      if (newScale >= 1.0) {
+        // Mapeia zoom da imagem (1.0 a 5.0) para o range da câmera
+        final double imageZoomRange = 5.0 - 1.0; // 4.0
+        final double cameraZoomRange = _maxCameraZoom - _minCameraZoom;
+        final double normalizedImageZoom =
+            (newScale - 1.0) / imageZoomRange; // 0.0 a 1.0
+        final double targetCameraZoom =
+            _minCameraZoom + (normalizedImageZoom * cameraZoomRange);
+        setCameraZoom(targetCameraZoom);
+        cameraScale.value = 1.0; // Preview em escala normal
+      } else {
+        // Para zoom < 1.0: câmera no zoom mínimo e escala a preview
+        setCameraZoom(_minCameraZoom);
+        cameraScale.value = newScale; // Escala a preview junto com a imagem
+      }
 
       // No modo desenho, sempre permite movimento (pan e drag)
       // Update position (drag) — calculate delta from start focal point
@@ -701,15 +716,25 @@ class CameraOverlayController extends GetxController {
 
   // Métodos de controle de zoom da câmera
   void _syncCameraZoomWithImage() {
-    // Sincronização perfeita: câmera acompanha proporcionalmente o zoom da imagem
-    // Mapeia o zoom da imagem (0.2 a 5.0) para o range da câmera (_minCameraZoom a _maxCameraZoom)
-    final double imageZoomRange = 5.0 - 0.2; // 4.8
-    final double cameraZoomRange = _maxCameraZoom - _minCameraZoom;
-    final double normalizedImageZoom =
-        (imageScale.value - 0.2) / imageZoomRange; // 0.0 a 1.0
-    final double targetCameraZoom =
-        _minCameraZoom + (normalizedImageZoom * cameraZoomRange);
-    setCameraZoom(targetCameraZoom);
+    // Sincronização perfeita com comportamento híbrido:
+    // - Para zoom >= 1.0: usa zoom da câmera
+    // - Para zoom < 1.0: mantém câmera no mínimo e usa escala da preview
+    if (imageScale.value >= 1.0) {
+      // Mapeia zoom da imagem (1.0 a 5.0) para o range da câmera
+      final double imageZoomRange = 5.0 - 1.0; // 4.0
+      final double cameraZoomRange = _maxCameraZoom - _minCameraZoom;
+      final double normalizedImageZoom =
+          (imageScale.value - 1.0) / imageZoomRange; // 0.0 a 1.0
+      final double targetCameraZoom =
+          _minCameraZoom + (normalizedImageZoom * cameraZoomRange);
+      setCameraZoom(targetCameraZoom);
+      cameraScale.value = 1.0; // Preview em escala normal
+    } else {
+      // Para zoom < 1.0: câmera no zoom mínimo e escala a preview
+      setCameraZoom(_minCameraZoom);
+      cameraScale.value =
+          imageScale.value; // Escala a preview junto com a imagem
+    }
   }
 
   Future<void> setCameraZoom(double zoom) async {

@@ -41,14 +41,17 @@ class CameraOverlayScreen extends StatelessWidget {
 
         return Stack(
           children: [
-            // Camera Preview com posicionamento
+            // Camera Preview com posicionamento e escala
             Positioned.fill(
               child: Transform.translate(
                 offset: Offset(
                   controller.cameraPositionX.value,
                   controller.cameraPositionY.value,
                 ),
-                child: CameraPreview(controller.cameraController.value!),
+                child: Transform.scale(
+                  scale: controller.cameraScale.value,
+                  child: CameraPreview(controller.cameraController.value!),
+                ),
               ),
             ),
 
