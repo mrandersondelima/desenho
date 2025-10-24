@@ -19,6 +19,7 @@ class CameraOverlayController extends GetxController {
   RxBool isMoveButtonActive = false.obs;
   RxBool isHideButtonActive = false.obs;
   RxBool isOpacityButtonActive = false.obs;
+  RxBool isToolsButtonActive = false.obs;
   RxBool isImageMoveButtonActive = false.obs;
   RxBool isCameraMoveButtonActive = false.obs;
 
@@ -36,6 +37,18 @@ class CameraOverlayController extends GetxController {
   bool get hasOverlayImages => overlayImagePaths.isNotEmpty;
   RxBool isMoveBarExpanded = false.obs;
   RxBool isOpacityBarExpanded = false.obs;
+  RxBool isOpacitySwitchEnabled = true.obs; // Switch para controlar opacidade
+  RxBool isToolsBarExpanded = false.obs; // Barra de ferramentas expandida
+  RxBool isFlashBarExpanded = false.obs; // Barra do botão Piscar expandida
+  RxBool isAngleBarExpanded = false.obs; // Barra do botão Ângulo expandida
+  RxBool isVisibilityBarExpanded =
+      false.obs; // Barra do botão Visualização expandida
+
+  // Estados dos botões da barra de ferramentas
+  RxBool isFlashButtonActive = false.obs;
+  RxBool isIlluminationButtonActive = false.obs;
+  RxBool isAngleButtonActive = false.obs;
+  RxBool isVisibilityButtonActive = false.obs;
 
   RxDouble imageOpacity = 0.5.obs;
   RxDouble imagePositionX = 0.0.obs;
@@ -48,8 +61,10 @@ class CameraOverlayController extends GetxController {
   RxDouble cameraPositionX = 0.0.obs;
   RxDouble cameraPositionY = 0.0.obs;
 
-  // Modo de interação: true = modo desenho, false = modo ajuste
-  RxBool isDrawingMode = false.obs;
+  // Modo de interação é determinado pelo estado do botão de mover imagem
+  // true = modo desenho (quando isImageMoveButtonActive = false)
+  // false = modo ajuste (quando isImageMoveButtonActive = true)
+  bool get isDrawingMode => !isImageMoveButtonActive.value;
 
   // Toggle para transparência automática (apenas no modo desenho)
   RxBool isAutoTransparencyEnabled = false.obs;
@@ -116,6 +131,7 @@ class CameraOverlayController extends GetxController {
     // Desativa os outros botões
     isHideButtonActive.value = false;
     isOpacityButtonActive.value = false;
+    isToolsButtonActive.value = false;
     // Alterna o estado do botão Mover (apenas para mostrar/esconder a barra secundária)
     isMoveButtonActive.value = !isMoveButtonActive.value;
 
@@ -125,9 +141,13 @@ class CameraOverlayController extends GetxController {
       isCameraMoveButtonActive.value = false;
     }
 
-    // Fecha a barra de opacidade quando a barra de movimento for ativada
+    // Fecha as outras barras quando a barra de movimento for ativada
     if (isMoveButtonActive.value) {
       isOpacityBarExpanded.value = false;
+      isToolsBarExpanded.value = false;
+      isFlashBarExpanded.value = false;
+      isAngleBarExpanded.value = false;
+      isVisibilityBarExpanded.value = false;
     }
   }
 
@@ -136,27 +156,30 @@ class CameraOverlayController extends GetxController {
     isHideButtonActive.value = false;
     isOpacityButtonActive.value = false;
     isCameraMoveButtonActive.value = false;
+
     // Alterna o estado do botão Mover Imagem
     isImageMoveButtonActive.value = !isImageMoveButtonActive.value;
 
-    // Fornece feedback ao usuário
+    // Quando isImageMoveButtonActive muda, o modo também muda automaticamente
     if (isImageMoveButtonActive.value) {
-      Get.snackbar(
-        'Modo Mover Imagem Ativado',
-        'Agora você pode mover e redimensionar a imagem',
-        backgroundColor: Colors.blue.withValues(alpha: 0.8),
-        colorText: Colors.white,
-        duration: const Duration(seconds: 2),
-      );
+      // Modo Ajuste ativado - reset das posições da câmera
+      cameraPositionX.value = 0.0;
+      cameraPositionY.value = 0.0;
+      setCameraZoom(_minCameraZoom);
+
+      // Se estava em modo desenho, desabilita a transparência automática
+      if (isAutoTransparencyEnabled.value) {
+        isAutoTransparencyEnabled.value = false;
+        _stopAutoTransparencyAnimation();
+      }
     } else {
-      Get.snackbar(
-        'Modo Mover Imagem Desativado',
-        'Movimentação da imagem bloqueada',
-        backgroundColor: Colors.grey.withValues(alpha: 0.8),
-        colorText: Colors.white,
-        duration: const Duration(seconds: 1),
-      );
+      // Modo Desenho ativado - reset das posições da câmera
+      cameraPositionX.value = 0.0;
+      cameraPositionY.value = 0.0;
+      setCameraZoom(_minCameraZoom);
     }
+
+    _autoSave();
   }
 
   void toggleMoveCameraButton() {
@@ -172,6 +195,7 @@ class CameraOverlayController extends GetxController {
     // Desativa os outros botões
     isMoveButtonActive.value = false;
     isOpacityButtonActive.value = false;
+    isToolsButtonActive.value = false;
     // Alterna o estado do botão Esconder
     isHideButtonActive.value = !isHideButtonActive.value;
   }
@@ -180,20 +204,113 @@ class CameraOverlayController extends GetxController {
     // Desativa os outros botões
     isMoveButtonActive.value = false;
     isHideButtonActive.value = false;
+    isToolsButtonActive.value = false;
     // Alterna o estado do botão Opacidade
     isOpacityButtonActive.value = !isOpacityButtonActive.value;
-
-    // Se estiver desativando o botão principal, fecha também a barra secundária
-    if (!isOpacityButtonActive.value) {
-      isOpacityBarExpanded.value = false;
-    }
 
     // Fecha a barra de movimento quando a barra de opacidade for ativada
     if (isOpacityButtonActive.value) {
       isMoveBarExpanded.value = false;
+      isToolsBarExpanded.value = false;
+      isFlashBarExpanded.value = false;
+      isAngleBarExpanded.value = false;
+      isVisibilityBarExpanded.value = false;
       // Desativa também os botões secundários da barra de movimento
       isImageMoveButtonActive.value = false;
       isCameraMoveButtonActive.value = false;
+    }
+  }
+
+  void toggleToolsButton() {
+    // Alterna o estado do botão Ferramentas
+    isToolsButtonActive.value = !isToolsButtonActive.value;
+
+    // Fecha as outras barras quando a barra de ferramentas for ativada
+    if (isToolsButtonActive.value) {
+      isMoveBarExpanded.value = false;
+      isOpacityBarExpanded.value = false;
+      isFlashBarExpanded.value = false;
+      isAngleBarExpanded.value = false;
+      isVisibilityBarExpanded.value = false;
+      // Desativa também os botões secundários
+      isImageMoveButtonActive.value = false;
+      isCameraMoveButtonActive.value = false;
+    }
+
+    // Se estiver desativando o botão principal, fecha também a barra secundária
+    // if (!isToolsButtonActive.value) {
+    //   isToolsBarExpanded.value = false;
+    //   isFlashButtonActive.value = false;
+    //   isIlluminationButtonActive.value = false;
+    // }
+  }
+
+  void toggleFlashButton() {
+    // Desativa os outros botões da barra de ferramentas
+    isIlluminationButtonActive.value = false;
+    isAngleButtonActive.value = false;
+    isVisibilityButtonActive.value = false;
+    // Alterna o estado do botão Piscar
+    isFlashButtonActive.value = !isFlashButtonActive.value;
+
+    // Controla a expansão da barra do botão Piscar
+    isFlashBarExpanded.value = isFlashButtonActive.value;
+
+    // Se estiver ativando, fecha outras barras
+    if (isFlashButtonActive.value) {
+      isMoveBarExpanded.value = false;
+      isOpacityBarExpanded.value = false;
+      isAngleBarExpanded.value = false;
+      isVisibilityBarExpanded.value = false;
+    }
+  }
+
+  void toggleIlluminationButton() {
+    // Desativa os outros botões da barra de ferramentas
+    isFlashButtonActive.value = false;
+    isAngleButtonActive.value = false;
+    isVisibilityButtonActive.value = false;
+    // Alterna o estado do botão Iluminação
+    isIlluminationButtonActive.value = !isIlluminationButtonActive.value;
+  }
+
+  void toggleAngleButton() {
+    // Desativa os outros botões da barra de ferramentas
+    isFlashButtonActive.value = false;
+    isIlluminationButtonActive.value = false;
+    isVisibilityButtonActive.value = false;
+    // Alterna o estado do botão Ângulo
+    isAngleButtonActive.value = !isAngleButtonActive.value;
+
+    // Controla a expansão da barra do botão Ângulo
+    isAngleBarExpanded.value = isAngleButtonActive.value;
+
+    // Se estiver ativando, fecha outras barras
+    if (isAngleButtonActive.value) {
+      isMoveBarExpanded.value = false;
+      isOpacityBarExpanded.value = false;
+      isFlashBarExpanded.value = false;
+      isVisibilityBarExpanded.value = false;
+    }
+  }
+
+  void toggleVisibilityButton() {
+    // Desativa os outros botões da barra de ferramentas
+    isFlashButtonActive.value = false;
+    isIlluminationButtonActive.value = false;
+    isAngleButtonActive.value = false;
+    // Alterna o estado do botão Visualização
+    isVisibilityButtonActive.value = !isVisibilityButtonActive.value;
+
+    // Controla a expansão da barra do botão Visualização
+    isVisibilityBarExpanded.value = isVisibilityButtonActive.value;
+
+    // Se estiver ativando, fecha outras barras
+    if (isVisibilityButtonActive.value) {
+      isMoveBarExpanded.value = false;
+      isOpacityBarExpanded.value = false;
+      isFlashBarExpanded.value = false;
+      isAngleBarExpanded.value = false;
     }
   }
 
@@ -239,20 +356,20 @@ class CameraOverlayController extends GetxController {
       await cameraController.value!.initialize();
 
       // Desabilita o autofocus definindo um foco fixo
-      try {
-        await cameraController.value!.setFocusMode(FocusMode.locked);
-      } catch (e) {
-        print('Erro ao configurar foco: $e');
-        // Se locked não funcionar, tenta auto uma vez e depois trava
-        try {
-          await cameraController.value!.setFocusMode(FocusMode.auto);
-          // Aguarda um momento para o foco se ajustar
-          await Future.delayed(const Duration(seconds: 2));
-          await cameraController.value!.setFocusMode(FocusMode.locked);
-        } catch (e2) {
-          print('Erro ao configurar foco alternativo: $e2');
-        }
-      }
+      // try {
+      //   await cameraController.value!.setFocusMode(FocusMode.locked);
+      // } catch (e) {
+      //   print('Erro ao configurar foco: $e');
+      //   // Se locked não funcionar, tenta auto uma vez e depois trava
+      //   try {
+      //     await cameraController.value!.setFocusMode(FocusMode.auto);
+      //     // Aguarda um momento para o foco se ajustar
+      //     await Future.delayed(const Duration(seconds: 2));
+      //     await cameraController.value!.setFocusMode(FocusMode.locked);
+      //   } catch (e2) {
+      //     print('Erro ao configurar foco alternativo: $e2');
+      //   }
+      // }
 
       // Inicializa os valores de zoom da câmera
       _minCameraZoom = await cameraController.value!.getMinZoomLevel();
@@ -524,7 +641,7 @@ class CameraOverlayController extends GetxController {
     // Só permite movimentação se o botão "Mover Imagem" estiver ativo
     if (!isImageMoveButtonActive.value) return;
 
-    if (isDrawingMode.value) {
+    if (isDrawingMode) {
       // Modo Desenho: zoom na câmera e na imagem simultaneamente com sincronização refinada
       final double newScale = (_initialScale * details.scale).clamp(0.2, 5.0);
       imageScale.value = newScale;
@@ -576,40 +693,12 @@ class CameraOverlayController extends GetxController {
     _autoSave();
   }
 
-  void toggleOverlayVisibility() {
-    showOverlayImage.value = !showOverlayImage.value;
+  void toggleOverlayVisibility(value) {
+    showOverlayImage.value = value;
     _autoSave();
   }
 
-  // Métodos de controle de modo e zoom da câmera
-  void toggleDrawingMode() {
-    isDrawingMode.value = !isDrawingMode.value;
-
-    if (isDrawingMode.value) {
-      // Quando entra no modo desenho, mantém câmera na posição normal
-      cameraPositionX.value = 0.0;
-      cameraPositionY.value = 0.0;
-
-      // Inicia o zoom da câmera zerado (zoom mínimo) no modo desenho
-      setCameraZoom(_minCameraZoom);
-    } else {
-      // Reset do zoom da câmera quando sai do modo desenho
-      setCameraZoom(_minCameraZoom);
-
-      // Reset da posição da câmera
-      cameraPositionX.value = 0.0;
-      cameraPositionY.value = 0.0;
-
-      // Se sair do modo desenho, desabilita a transparência automática
-      if (isAutoTransparencyEnabled.value) {
-        isAutoTransparencyEnabled.value = false;
-        _stopAutoTransparencyAnimation();
-      }
-    }
-    _autoSave();
-  }
-
-  // Sincroniza o zoom da câmera com base no zoom atual da imagem
+  // Métodos de controle de zoom da câmera
   void _syncCameraZoomWithImage() {
     // Sincronização suave: apenas aplicar zoom na câmera quando a imagem está acima do zoom padrão (1.0)
     if (imageScale.value > 1.0) {
@@ -743,7 +832,7 @@ class CameraOverlayController extends GetxController {
     _updateCurrentDimensions(); // Atualiza dimensões quando escala mudar
 
     // Se estiver no modo desenho, sincroniza o zoom da câmera
-    if (isDrawingMode.value) {
+    if (isDrawingMode) {
       _syncCameraZoomWithImage();
     }
 
@@ -772,7 +861,7 @@ class CameraOverlayController extends GetxController {
     cameraPositionY.value = 0.0;
 
     // Se estiver no modo desenho, reset do zoom da câmera também
-    if (isDrawingMode.value) {
+    if (isDrawingMode) {
       setCameraZoom(_minCameraZoom);
     }
 
@@ -1105,7 +1194,7 @@ class CameraOverlayController extends GetxController {
   }
 
   void _startAutoTransparencyAnimation() {
-    if (!isDrawingMode.value) return; // Só funciona no modo desenho
+    if (!isDrawingMode) return; // Só funciona no modo desenho
 
     _maxTransparencyValue = imageOpacity.value; // Salva o valor atual do slider
     _animateTransparency();
@@ -1117,7 +1206,7 @@ class CameraOverlayController extends GetxController {
   }
 
   void _animateTransparency() async {
-    if (!isAutoTransparencyEnabled.value || !isDrawingMode.value) return;
+    if (!isAutoTransparencyEnabled.value || !isDrawingMode) return;
 
     // Anima de 0 até o valor máximo
     for (
@@ -1125,7 +1214,7 @@ class CameraOverlayController extends GetxController {
       opacity <= _maxTransparencyValue;
       opacity += 0.02
     ) {
-      if (!isAutoTransparencyEnabled.value || !isDrawingMode.value) break;
+      if (!isAutoTransparencyEnabled.value || !isDrawingMode) break;
       autoTransparencyValue.value = opacity;
       await Future.delayed(const Duration(milliseconds: 50));
     }
@@ -1136,13 +1225,13 @@ class CameraOverlayController extends GetxController {
       opacity >= 0.0;
       opacity -= 0.02
     ) {
-      if (!isAutoTransparencyEnabled.value || !isDrawingMode.value) break;
+      if (!isAutoTransparencyEnabled.value || !isDrawingMode) break;
       autoTransparencyValue.value = opacity;
       await Future.delayed(const Duration(milliseconds: 50));
     }
 
     // Repete a animação
-    if (isAutoTransparencyEnabled.value && isDrawingMode.value) {
+    if (isAutoTransparencyEnabled.value && isDrawingMode) {
       _animateTransparency();
     }
   }

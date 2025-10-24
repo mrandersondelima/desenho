@@ -17,7 +17,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: ProjectListScreen(),
+      home: SafeArea(child: ProjectListScreen()),
       debugShowCheckedModeBanner: false,
     );
   }

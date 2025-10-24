@@ -22,30 +22,6 @@ class CameraOverlayScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black.withValues(alpha: 0.7),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () async {
-            // Força salvamento antes de voltar
-            await controller.forceSave();
-            Get.back();
-          },
-        ),
-        title: Text(
-          project?.name ?? 'Camera Overlay',
-          style: const TextStyle(color: Colors.white, fontSize: 18),
-        ),
-        actions: [
-          if (project != null)
-            IconButton(
-              icon: const Icon(Icons.save, color: Colors.white),
-              onPressed: controller.saveCurrentProject,
-              tooltip: 'Salvar projeto',
-            ),
-        ],
-      ),
       body: Obx(() {
         if (controller.isLoading.value) {
           return const Center(
@@ -111,13 +87,178 @@ class CameraOverlayScreen extends StatelessWidget {
                 ),
               ),
 
+            // Barra superior
             Positioned(
               top: 0,
+              left: 0,
               right: 0,
-              child: FloatingActionButton(
-                onPressed: controller.toggleVisibility,
-                child: const Icon(Icons.remove_red_eye),
+              child: Obx(
+                () => controller.areControlsVisible.value
+                    ? SafeArea(
+                        child: Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Colors.grey[300]!,
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              // Botão Voltar
+                              _buildToolbarButton(
+                                label: 'Voltar',
+                                isActive: false,
+                                onPressed: () async {
+                                  // Força salvamento antes de voltar
+                                  await controller.forceSave();
+                                  Get.back();
+                                },
+                              ),
+                              // Botão Ferramentas
+                              Obx(
+                                () => _buildToolbarButton(
+                                  label: 'Ferramentas',
+                                  isActive:
+                                      controller.isToolsButtonActive.value,
+                                  onPressed: () {
+                                    controller.toggleToolsButton();
+                                    controller.isToolsBarExpanded.value =
+                                        !controller.isToolsBarExpanded.value;
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Container(),
               ),
+            ),
+
+            // Barra secundária superior (ferramentas)
+            Obx(
+              () => controller.areControlsVisible.value
+                  ? Visibility(
+                      visible: controller.isToolsBarExpanded.value,
+                      child: Positioned(
+                        top: 50,
+                        left: 0,
+                        right: 0,
+                        child: SafeArea(
+                          child: Container(
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.grey[300]!,
+                                  width: 1,
+                                ),
+                              ),
+                            ),
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              children: [
+                                // Botão Piscar
+                                Obx(
+                                  () => _buildToolbarButton(
+                                    label: 'Piscar',
+                                    isActive:
+                                        controller.isFlashButtonActive.value,
+                                    onPressed: () {
+                                      controller.toggleFlashButton();
+                                    },
+                                  ),
+                                ),
+
+                                // Botão Iluminação
+                                Obx(
+                                  () => _buildToolbarButton(
+                                    label: 'Iluminação',
+                                    isActive: controller
+                                        .isIlluminationButtonActive
+                                        .value,
+                                    onPressed: () {
+                                      controller.toggleIlluminationButton();
+                                    },
+                                  ),
+                                ),
+
+                                Obx(
+                                  () => _buildToolbarButton(
+                                    label: 'Ângulo',
+                                    isActive:
+                                        controller.isAngleButtonActive.value,
+                                    onPressed: () {
+                                      controller.toggleAngleButton();
+                                    },
+                                  ),
+                                ),
+
+                                // Botão Camadas
+                                Obx(
+                                  () => _buildToolbarButton(
+                                    label: 'Camadas',
+                                    isActive: controller
+                                        .isVisibilityButtonActive
+                                        .value,
+                                    onPressed: () {
+                                      controller.toggleVisibilityButton();
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : Container(),
+            ),
+
+            // Botão para mostrar controles (aparece apenas quando controles estão ocultos)
+            Obx(
+              () => !controller.areControlsVisible.value
+                  ? Positioned(
+                      top: 0, // Logo abaixo da barra superior
+                      left: 16,
+                      child: SafeArea(
+                        child: GestureDetector(
+                          onTap: () {
+                            controller.areControlsVisible.value = true;
+                          },
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 4,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.visibility,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : Container(),
             ),
 
             // Controls
@@ -196,314 +337,21 @@ class CameraOverlayScreen extends StatelessWidget {
                             ],
                           ),
 
-                        // Opacity Slider
-                        if (controller.hasOverlayImages)
-                          Row(
-                            children: [
-                              const Icon(Icons.opacity, color: Colors.white),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Slider(
-                                  value: controller.imageOpacity.value,
-                                  min: 0.0,
-                                  max: 1.0,
-                                  activeColor: Colors.blue,
-                                  inactiveColor: Colors.grey,
-                                  onChanged: controller.updateImageOpacity,
-                                ),
-                              ),
-                              Text(
-                                '${(controller.imageOpacity.value * 100).round()}%',
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ],
-                          ),
-
-                        // Auto-transparency toggle (only in drawing mode)
-                        if (controller.hasOverlayImages &&
-                            controller.isDrawingMode.value)
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.auto_awesome,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Auto Transparência',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const Spacer(),
-                              Switch(
-                                value:
-                                    controller.isAutoTransparencyEnabled.value,
-                                activeColor: Colors.blue,
-                                onChanged: (value) =>
-                                    controller.toggleAutoTransparency(),
-                              ),
-                            ],
-                          ),
-
-                        // Rotation Slider and Text Input
-                        if (controller.hasOverlayImages)
-                          Column(
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.rotate_right,
-                                    color: Colors.white,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Slider(
-                                      value: controller.imageRotation.value,
-                                      min: 0.0,
-                                      max: 360.0,
-                                      activeColor: Colors.orange,
-                                      inactiveColor: Colors.grey,
-                                      onChanged: controller.updateRotation,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${controller.imageRotation.value.round()}°',
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ],
-                              ),
-                              // Text input for rotation
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8.0,
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Text(
-                                      'Ângulo:',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Container(
-                                        height: 35,
-                                        child: TextField(
-                                          controller:
-                                              controller.rotationTextController,
-                                          keyboardType: TextInputType.number,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 14,
-                                          ),
-                                          decoration: InputDecoration(
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 4,
-                                                ),
-                                            border: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              borderSide: const BorderSide(
-                                                color: Colors.orange,
-                                              ),
-                                            ),
-                                            enabledBorder: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              borderSide: const BorderSide(
-                                                color: Colors.orange,
-                                                width: 1,
-                                              ),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              borderSide: const BorderSide(
-                                                color: Colors.orange,
-                                                width: 2,
-                                              ),
-                                            ),
-                                            suffixText: '°',
-                                            suffixStyle: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          onSubmitted:
-                                              controller.updateRotationFromText,
-                                          onChanged:
-                                              controller.updateRotationFromText,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-
                         const SizedBox(height: 16),
 
                         // Action Buttons
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            // Pick Image Button (com suporte a múltiplas imagens)
-                            GestureDetector(
-                              onTap: controller.pickImage,
-                              onLongPress:
-                                  controller.pickMultipleImagesFromGallery,
-                              child: FloatingActionButton(
-                                heroTag: 'pick_image',
-                                onPressed: null, // Usa GestureDetector ao invés
-                                backgroundColor: Colors.blue,
-                                child: Stack(
-                                  children: [
-                                    const Center(
-                                      child: Icon(
-                                        Icons.image,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    if (controller.overlayImagePaths.length > 1)
-                                      Positioned(
-                                        top: 4,
-                                        right: 4,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(2),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.red,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Text(
-                                            '${controller.overlayImagePaths.length}',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            // Switch Camera Button
-                            FloatingActionButton(
-                              heroTag: 'switch_camera',
-                              onPressed: controller.cameras.length > 1
-                                  ? controller.switchCamera
-                                  : null,
-                              backgroundColor: controller.cameras.length > 1
-                                  ? Colors.green
-                                  : Colors.grey,
-                              child: const Icon(Icons.switch_camera),
-                            ),
-
-                            // Toggle Overlay Button
-                            if (controller.hasOverlayImages)
-                              FloatingActionButton(
-                                heroTag: 'toggle_overlay',
-                                onPressed: controller.toggleOverlayVisibility,
-                                backgroundColor:
-                                    controller.showOverlayImage.value
-                                    ? Colors.orange
-                                    : Colors.grey,
-                                child: Icon(
-                                  controller.showOverlayImage.value
-                                      ? Icons.visibility
-                                      : Icons.visibility_off,
-                                ),
-                              ),
-
-                            // Reset Transform Button
-                            if (controller.hasOverlayImages)
-                              FloatingActionButton(
-                                heroTag: 'reset_transform',
-                                onPressed: controller.resetImageTransform,
-                                backgroundColor: Colors.red,
-                                child: const Icon(Icons.refresh),
-                              ),
-                          ],
-                        ),
-
-                        // Mode Toggle (when image is selected)
-                        if (controller.hasOverlayImages) ...[
-                          const SizedBox(height: 16),
-
-                          // Mode Toggle Switch
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.tune,
-                                  color: !controller.isDrawingMode.value
-                                      ? Colors.white
-                                      : Colors.grey,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Ajuste',
-                                  style: TextStyle(
-                                    color: !controller.isDrawingMode.value
-                                        ? Colors.white
-                                        : Colors.grey,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Switch(
-                                  value: controller.isDrawingMode.value,
-                                  onChanged: (value) =>
-                                      controller.toggleDrawingMode(),
-                                  activeColor: Colors.green,
-                                  inactiveThumbColor: Colors.grey,
-                                  inactiveTrackColor: Colors.grey.withValues(
-                                    alpha: 0.3,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  'Desenho',
-                                  style: TextStyle(
-                                    color: controller.isDrawingMode.value
-                                        ? Colors.white
-                                        : Colors.grey,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Icon(
-                                  Icons.draw,
-                                  color: controller.isDrawingMode.value
-                                      ? Colors.white
-                                      : Colors.grey,
-                                  size: 16,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                        // Row(
+                        //   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        //   children: [
+                        //     if (controller.hasOverlayImages)
+                        //       FloatingActionButton(
+                        //         heroTag: 'reset_transform',
+                        //         onPressed: controller.resetImageTransform,
+                        //         backgroundColor: Colors.red,
+                        //         child: const Icon(Icons.refresh),
+                        //       ),
+                        //   ],
+                        // ),
 
                         // Rotation Quick Buttons (when image is selected)
                         if (controller.hasOverlayImages)
@@ -574,65 +422,120 @@ class CameraOverlayScreen extends StatelessWidget {
                 ),
               ),
 
-            // Mode and Zoom Status (when image is selected)
-            if (controller.hasOverlayImages)
-              Positioned(
-                top: 100,
-                left: 20,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: controller.isDrawingMode.value
-                          ? Colors.green
-                          : Colors.blue,
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        controller.isDrawingMode.value
-                            ? Icons.draw
-                            : Icons.tune,
-                        color: controller.isDrawingMode.value
-                            ? Colors.green
-                            : Colors.blue,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        controller.isDrawingMode.value
-                            ? 'Modo Desenho'
-                            : 'Modo Ajuste',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      if (controller.isDrawingMode.value) ...[
-                        const SizedBox(width: 8),
-                        Icon(Icons.zoom_in, color: Colors.grey[300], size: 12),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${controller.cameraZoom.value.toStringAsFixed(1)}x',
-                          style: TextStyle(
-                            color: Colors.grey[300],
-                            fontSize: 10,
+            // Barra do botão Camadas deslizante (seleção de imagens) - aparece abaixo da barra de ferramentas
+            Obx(
+              () => controller.areControlsVisible.value
+                  ? Visibility(
+                      visible: controller.isVisibilityBarExpanded.value,
+                      child: Positioned(
+                        top:
+                            90, // 50 (barra principal) + 40 (barra secundária) + 40 (barra piscar) + 40 (barra ângulo)
+                        left: 0,
+                        right: 0,
+                        child: SafeArea(
+                          child: Container(
+                            height:
+                                60, // Altura um pouco maior para acomodar a lista de imagens
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.grey[300]!,
+                                  width: 1,
+                                ),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8.0,
+                                vertical: 4.0,
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.layers,
+                                    color: Colors.black,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: controller.overlayImagePaths.isEmpty
+                                        ? const Center(
+                                            child: Text(
+                                              'Nenhuma imagem carregada',
+                                              style: TextStyle(
+                                                color: Colors.grey,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          )
+                                        : ListView.builder(
+                                            scrollDirection: Axis.horizontal,
+                                            itemCount: controller
+                                                .overlayImagePaths
+                                                .length,
+                                            itemBuilder: (context, index) {
+                                              bool isSelected =
+                                                  controller
+                                                      .currentImageIndex
+                                                      .value ==
+                                                  index;
+                                              return GestureDetector(
+                                                onTap: () => controller
+                                                    .selectImageByIndex(index),
+                                                child: Container(
+                                                  margin: const EdgeInsets.only(
+                                                    right: 8,
+                                                  ),
+                                                  width: 45,
+                                                  height: 45,
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(
+                                                      color: isSelected
+                                                          ? Colors.blue
+                                                          : Colors.grey,
+                                                      width: isSelected ? 2 : 1,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  child: ClipRRect(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          6,
+                                                        ),
+                                                    child: Image.file(
+                                                      File(
+                                                        controller
+                                                            .overlayImagePaths[index],
+                                                      ),
+                                                      fit: BoxFit.cover,
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                  ),
+                                  Text(
+                                    '${controller.currentImageIndex.value + 1}/${controller.overlayImagePaths.length}',
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
+                      ),
+                    )
+                  : Container(),
+            ),
 
             // Barra de instruções deslizante
             Obx(
@@ -680,11 +583,9 @@ class CameraOverlayScreen extends StatelessWidget {
                   height: 40,
                   decoration: const BoxDecoration(color: Colors.white),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    padding: EdgeInsets.symmetric(horizontal: 8.0),
                     child: Row(
                       children: [
-                        const Icon(Icons.opacity, color: Colors.black),
-                        const SizedBox(width: 8),
                         Expanded(
                           child: Slider(
                             value: controller.imageOpacity.value,
@@ -702,6 +603,14 @@ class CameraOverlayScreen extends StatelessWidget {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
+                        Switch.adaptive(
+                          value: controller.isOpacitySwitchEnabled.value,
+                          onChanged: (value) {
+                            controller.toggleOverlayVisibility(value);
+                            controller.isOpacitySwitchEnabled.value = value;
+                          },
+                          activeColor: Colors.blue,
+                        ),
                       ],
                     ),
                   ),
@@ -709,64 +618,256 @@ class CameraOverlayScreen extends StatelessWidget {
               ),
             ),
 
+            // Barra do botão Piscar deslizante (auto transparência) - aparece abaixo da barra de ferramentas
+            Obx(
+              () => controller.areControlsVisible.value
+                  ? Visibility(
+                      visible: controller.isFlashBarExpanded.value,
+                      child: Positioned(
+                        top: 90, // 50 (barra principal) + 40 (barra secundária)
+                        left: 0,
+                        right: 0,
+                        child: SafeArea(
+                          child: Container(
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.grey[300]!,
+                                  width: 1,
+                                ),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8.0,
+                              ),
+                              child: Row(
+                                children: [
+                                  // Só mostra o switch se estiver no modo desenho
+                                  Obx(
+                                    () => Switch.adaptive(
+                                      value:
+                                          !controller
+                                              .isImageMoveButtonActive
+                                              .value
+                                          ? controller
+                                                .isAutoTransparencyEnabled
+                                                .value
+                                          : false,
+                                      onChanged:
+                                          !controller
+                                              .isImageMoveButtonActive
+                                              .value
+                                          ? (value) => controller
+                                                .toggleAutoTransparency()
+                                          : null,
+                                      activeColor: Colors.blue,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+
+                                  // Indicador de modo
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : Container(),
+            ),
+
+            // Barra do botão Ângulo deslizante (controles de rotação) - aparece abaixo da barra de ferramentas
+            Obx(
+              () => controller.areControlsVisible.value
+                  ? Visibility(
+                      visible: controller.isAngleBarExpanded.value,
+                      child: Positioned(
+                        top:
+                            90, // 50 (barra principal) + 40 (barra secundária) + 40 (barra piscar)
+                        left: 0,
+                        right: 0,
+                        child: SafeArea(
+                          child: Container(
+                            height:
+                                100, // Altura maior para acomodar slider e input
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.grey[300]!,
+                                  width: 1,
+                                ),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8.0,
+                                vertical: 8.0,
+                              ),
+                              child: Column(
+                                children: [
+                                  // Slider de rotação
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Slider(
+                                          value: controller.imageRotation.value,
+                                          min: 0.0,
+                                          max: 360.0,
+                                          activeColor: Colors.blue,
+                                          inactiveColor: Colors.grey,
+                                          onChanged: controller.updateRotation,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${controller.imageRotation.value.round()}°',
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  // Input de ângulo
+                                  Row(
+                                    children: [
+                                      const Text(
+                                        'Ângulo:',
+                                        style: TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Container(
+                                          height: 30,
+                                          child: TextField(
+                                            controller: controller
+                                                .rotationTextController,
+                                            keyboardType: TextInputType.number,
+                                            style: const TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 14,
+                                            ),
+                                            decoration: InputDecoration(
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                              border: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                borderSide: const BorderSide(
+                                                  color: Colors.blue,
+                                                ),
+                                              ),
+                                              enabledBorder: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                borderSide: const BorderSide(
+                                                  color: Colors.blue,
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                borderSide: const BorderSide(
+                                                  color: Colors.blue,
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              suffixText: '°',
+                                              suffixStyle: const TextStyle(
+                                                color: Colors.grey,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            onSubmitted: controller
+                                                .updateRotationFromText,
+                                            onChanged: controller
+                                                .updateRotationFromText,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : Container(),
+            ),
+
             // Barra de ferramentas inferior
             Positioned(
               bottom: 0,
               left: 0,
               right: 0,
-              child: Container(
-                height: 50,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border(
-                    top: BorderSide(color: Colors.grey[300]!, width: 1),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Botão Mover
-                    Obx(
-                      () => _buildToolbarButton(
-                        label: 'Mover',
-                        isActive: controller.isMoveButtonActive.value,
-                        onPressed: () {
-                          controller.toggleMoveButton();
-                          controller.isMoveBarExpanded.value =
-                              !controller.isMoveBarExpanded.value;
-                        },
-                      ),
-                    ),
+              child: Obx(
+                () => controller.areControlsVisible.value
+                    ? Container(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border(
+                            top: BorderSide(color: Colors.grey[300]!, width: 1),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Botão Mover
+                            Obx(
+                              () => _buildToolbarButton(
+                                label: 'Mover',
+                                isActive: controller.isMoveButtonActive.value,
+                                onPressed: () {
+                                  controller.toggleMoveButton();
+                                  controller.isMoveBarExpanded.value =
+                                      !controller.isMoveBarExpanded.value;
+                                },
+                              ),
+                            ),
 
-                    // Botão Esconder
-                    Obx(
-                      () => _buildToolbarButton(
-                        label: 'Esconder',
-                        isActive: controller.isHideButtonActive.value,
-                        onPressed: () {
-                          controller.toggleHideButton();
-                          Get.snackbar(
-                            'Esconder',
-                            'Funcionalidade em desenvolvimento',
-                          );
-                        },
-                      ),
-                    ),
+                            // Botão Esconder
+                            Obx(
+                              () => _buildToolbarButton(
+                                label: 'Esconder',
+                                isActive: controller.isHideButtonActive.value,
+                                onPressed: () {
+                                  controller.toggleHideButton();
+                                  controller.toggleVisibility();
+                                },
+                              ),
+                            ),
 
-                    // Botão Opacidade
-                    Obx(
-                      () => _buildToolbarButton(
-                        label: 'Opacidade',
-                        isActive: controller.isOpacityButtonActive.value,
-                        onPressed: () {
-                          controller.toggleOpacityButton();
-                          controller.isOpacityBarExpanded.value =
-                              !controller.isOpacityBarExpanded.value;
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+                            // Botão Opacidade
+                            Obx(
+                              () => _buildToolbarButton(
+                                label: 'Opacidade',
+                                isActive:
+                                    controller.isOpacityButtonActive.value,
+                                onPressed: () {
+                                  controller.toggleOpacityButton();
+                                  controller.isOpacityBarExpanded.value =
+                                      !controller.isOpacityBarExpanded.value;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox.shrink(),
               ),
             ),
           ],
