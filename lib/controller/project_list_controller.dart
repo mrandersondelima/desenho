@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:file_picker/file_picker.dart';
 import '../models/project.dart';
 import '../services/project_service.dart';
 import '../screens/camera_overlay_screen.dart';
@@ -81,8 +82,8 @@ class ProjectListController extends GetxController {
           colorText: Colors.white,
         );
 
-        // Navega diretamente para o projeto criado
-        openProject(project);
+        // Navega diretamente para o projeto criado e seleciona imagens
+        await openProjectWithImageSelection(project);
       } else {
         Get.snackbar(
           'Erro',
@@ -115,6 +116,80 @@ class ProjectListController extends GetxController {
       // Quando volta da tela de câmera, recarrega os projetos
       loadProjects();
     });
+  }
+
+  // Abre um projeto e solicita seleção de imagens
+  Future<void> openProjectWithImageSelection(Project project) async {
+    // Primeiro, solicita a seleção de imagens
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+        dialogTitle: 'Selecione uma ou mais imagens para o projeto',
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        // Se imagens foram selecionadas, salva no projeto
+        final imagePaths = result.paths
+            .where((path) => path != null)
+            .cast<String>()
+            .toList();
+
+        if (imagePaths.isNotEmpty) {
+          // Atualiza o projeto com as imagens selecionadas
+          final updatedProject = project.copyWith(
+            overlayImagePaths: imagePaths,
+            currentImageIndex: 0,
+            lastModified: DateTime.now(),
+          );
+
+          // Salva o projeto atualizado
+          final success = await _projectService.saveProject(updatedProject);
+          if (success) {
+            Get.snackbar(
+              'Sucesso',
+              '${imagePaths.length} imagem(ns) adicionada(s) ao projeto!',
+              snackPosition: SnackPosition.BOTTOM,
+              backgroundColor: Colors.green.withValues(alpha: 0.8),
+              colorText: Colors.white,
+            );
+
+            // Navega para a tela de câmera com o projeto atualizado
+            openProject(updatedProject);
+          } else {
+            // Se falhou ao salvar, ainda navega mas sem as imagens
+            Get.snackbar(
+              'Aviso',
+              'Erro ao salvar imagens no projeto, mas continuando...',
+              snackPosition: SnackPosition.BOTTOM,
+              backgroundColor: Colors.orange.withValues(alpha: 0.8),
+              colorText: Colors.white,
+            );
+            openProject(project);
+          }
+        }
+      } else {
+        // Se não selecionou imagens, navega normalmente
+        Get.snackbar(
+          'Informação',
+          'Nenhuma imagem selecionada. Você pode adicionar depois.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.blue.withValues(alpha: 0.8),
+          colorText: Colors.white,
+        );
+        openProject(project);
+      }
+    } catch (e) {
+      // Se houve erro na seleção, navega normalmente
+      Get.snackbar(
+        'Erro',
+        'Erro ao selecionar imagens: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withValues(alpha: 0.8),
+        colorText: Colors.white,
+      );
+      openProject(project);
+    }
   }
 
   // Deleta um projeto

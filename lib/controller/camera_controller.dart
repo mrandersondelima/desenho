@@ -13,6 +13,14 @@ class CameraOverlayController extends GetxController {
   Rx<CameraController?> cameraController = Rx<CameraController?>(null);
   RxBool isCameraInitialized = false.obs;
   RxBool isLoading = true.obs;
+  RxBool areControlsVisible = true.obs;
+
+  // Estados dos botões da barra inferior
+  RxBool isMoveButtonActive = false.obs;
+  RxBool isHideButtonActive = false.obs;
+  RxBool isOpacityButtonActive = false.obs;
+  RxBool isImageMoveButtonActive = false.obs;
+  RxBool isCameraMoveButtonActive = false.obs;
 
   // Lista de imagens sobrepostas
   RxList<String> overlayImagePaths = <String>[].obs;
@@ -26,6 +34,8 @@ class CameraOverlayController extends GetxController {
       : '';
 
   bool get hasOverlayImages => overlayImagePaths.isNotEmpty;
+  RxBool isMoveBarExpanded = false.obs;
+  RxBool isOpacityBarExpanded = false.obs;
 
   RxDouble imageOpacity = 0.5.obs;
   RxDouble imagePositionX = 0.0.obs;
@@ -73,7 +83,6 @@ class CameraOverlayController extends GetxController {
   double _initialScale = 1.0;
   double _initialX = 0.0;
   double _initialY = 0.0;
-  double _initialCameraZoom = 1.0; // Zoom inicial da câmera para gestos
   double _initialCameraX = 0.0; // Posição X inicial da câmera
   double _initialCameraY = 0.0; // Posição Y inicial da câmera
 
@@ -97,6 +106,95 @@ class CameraOverlayController extends GetxController {
     imageWidthController.dispose();
     imageHeightController.dispose();
     super.onClose();
+  }
+
+  void toggleVisibility() {
+    areControlsVisible.value = !areControlsVisible.value;
+  }
+
+  void toggleMoveButton() {
+    // Desativa os outros botões
+    isHideButtonActive.value = false;
+    isOpacityButtonActive.value = false;
+    // Alterna o estado do botão Mover (apenas para mostrar/esconder a barra secundária)
+    isMoveButtonActive.value = !isMoveButtonActive.value;
+
+    // Se estiver desativando o botão principal, desativa também os botões secundários
+    if (!isMoveButtonActive.value) {
+      isImageMoveButtonActive.value = false;
+      isCameraMoveButtonActive.value = false;
+    }
+
+    // Fecha a barra de opacidade quando a barra de movimento for ativada
+    if (isMoveButtonActive.value) {
+      isOpacityBarExpanded.value = false;
+    }
+  }
+
+  void toggleMoveImageButton() {
+    // Desativa os outros botões
+    isHideButtonActive.value = false;
+    isOpacityButtonActive.value = false;
+    isCameraMoveButtonActive.value = false;
+    // Alterna o estado do botão Mover Imagem
+    isImageMoveButtonActive.value = !isImageMoveButtonActive.value;
+
+    // Fornece feedback ao usuário
+    if (isImageMoveButtonActive.value) {
+      Get.snackbar(
+        'Modo Mover Imagem Ativado',
+        'Agora você pode mover e redimensionar a imagem',
+        backgroundColor: Colors.blue.withValues(alpha: 0.8),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+    } else {
+      Get.snackbar(
+        'Modo Mover Imagem Desativado',
+        'Movimentação da imagem bloqueada',
+        backgroundColor: Colors.grey.withValues(alpha: 0.8),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 1),
+      );
+    }
+  }
+
+  void toggleMoveCameraButton() {
+    // Desativa os outros botões
+    isHideButtonActive.value = false;
+    isOpacityButtonActive.value = false;
+    isImageMoveButtonActive.value = false;
+    // Alterna o estado do botão Mover Câmera
+    isCameraMoveButtonActive.value = !isCameraMoveButtonActive.value;
+  }
+
+  void toggleHideButton() {
+    // Desativa os outros botões
+    isMoveButtonActive.value = false;
+    isOpacityButtonActive.value = false;
+    // Alterna o estado do botão Esconder
+    isHideButtonActive.value = !isHideButtonActive.value;
+  }
+
+  void toggleOpacityButton() {
+    // Desativa os outros botões
+    isMoveButtonActive.value = false;
+    isHideButtonActive.value = false;
+    // Alterna o estado do botão Opacidade
+    isOpacityButtonActive.value = !isOpacityButtonActive.value;
+
+    // Se estiver desativando o botão principal, fecha também a barra secundária
+    if (!isOpacityButtonActive.value) {
+      isOpacityBarExpanded.value = false;
+    }
+
+    // Fecha a barra de movimento quando a barra de opacidade for ativada
+    if (isOpacityButtonActive.value) {
+      isMoveBarExpanded.value = false;
+      // Desativa também os botões secundários da barra de movimento
+      isImageMoveButtonActive.value = false;
+      isCameraMoveButtonActive.value = false;
+    }
   }
 
   Future<void> initializeCamera() async {
@@ -139,6 +237,22 @@ class CameraOverlayController extends GetxController {
 
     try {
       await cameraController.value!.initialize();
+
+      // Desabilita o autofocus definindo um foco fixo
+      try {
+        await cameraController.value!.setFocusMode(FocusMode.locked);
+      } catch (e) {
+        print('Erro ao configurar foco: $e');
+        // Se locked não funcionar, tenta auto uma vez e depois trava
+        try {
+          await cameraController.value!.setFocusMode(FocusMode.auto);
+          // Aguarda um momento para o foco se ajustar
+          await Future.delayed(const Duration(seconds: 2));
+          await cameraController.value!.setFocusMode(FocusMode.locked);
+        } catch (e2) {
+          print('Erro ao configurar foco alternativo: $e2');
+        }
+      }
 
       // Inicializa os valores de zoom da câmera
       _minCameraZoom = await cameraController.value!.getMinZoomLevel();
@@ -341,17 +455,26 @@ class CameraOverlayController extends GetxController {
   }
 
   void updatePosition(double x, double y) {
+    // Só permite alteração de posição se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     imagePositionX.value = x;
     imagePositionY.value = y;
     _autoSave();
   }
 
   void updateScale(double value) {
+    // Só permite escala se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     imageScale.value = value;
     _autoSave();
   }
 
   void updateRotation(double value) {
+    // Só permite rotação se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     imageRotation.value = value;
     // Atualiza o campo de texto sem triggar o listener
     rotationTextController.text = value.round().toString();
@@ -359,6 +482,9 @@ class CameraOverlayController extends GetxController {
   }
 
   void updateRotationFromText(String text) {
+    // Só permite rotação se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     final double? value = double.tryParse(text);
     if (value != null) {
       // Normaliza o valor para ficar entre 0 e 360
@@ -371,19 +497,23 @@ class CameraOverlayController extends GetxController {
   }
 
   void rotateImage(double degrees) {
+    // Só permite rotação se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     final newRotation = (imageRotation.value + degrees) % 360;
     imageRotation.value = newRotation;
     rotationTextController.text = newRotation.round().toString();
     _autoSave();
-  }
+  } // Gesture handlers for ScaleGestureRecognizer (covers pan + scale)
 
-  // Gesture handlers for ScaleGestureRecognizer (covers pan + scale)
   void onScaleStart(ScaleStartDetails details) {
+    // Só permite movimentação se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     _startFocalPoint = details.focalPoint;
     _initialScale = imageScale.value;
     _initialX = imagePositionX.value;
     _initialY = imagePositionY.value;
-    _initialCameraZoom = cameraZoom.value; // Armazena zoom inicial da câmera
     _initialCameraX =
         cameraPositionX.value; // Armazena posição X inicial da câmera
     _initialCameraY =
@@ -391,17 +521,27 @@ class CameraOverlayController extends GetxController {
   }
 
   void onScaleUpdate(ScaleUpdateDetails details) {
+    // Só permite movimentação se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     if (isDrawingMode.value) {
-      // Modo Desenho: zoom na câmera e na imagem simultaneamente
+      // Modo Desenho: zoom na câmera e na imagem simultaneamente com sincronização refinada
       final double newScale = (_initialScale * details.scale).clamp(0.2, 5.0);
       imageScale.value = newScale;
 
-      // Aplica zoom na câmera baseado no zoom inicial
-      final newCameraZoom = (_initialCameraZoom * details.scale).clamp(
-        _minCameraZoom,
-        _maxCameraZoom,
-      );
-      setCameraZoom(newCameraZoom);
+      // Sincronização suave: apenas aplicar zoom na câmera quando a imagem está acima do zoom padrão (1.0)
+      if (newScale > 1.0) {
+        // Mapeia zoom da imagem acima de 1.0 para o range da câmera
+        final double zoomAboveDefault = newScale - 1.0; // 0.0 a 4.0
+        final double normalizedZoom = zoomAboveDefault / 4.0; // 0.0 a 1.0
+        final double targetCameraZoom =
+            _minCameraZoom +
+            (normalizedZoom * (_maxCameraZoom - _minCameraZoom));
+        setCameraZoom(targetCameraZoom);
+      } else {
+        // Se zoom da imagem <= 1.0, mantém câmera no zoom mínimo
+        setCameraZoom(_minCameraZoom);
+      }
 
       // Update position (drag) — calculate delta from start focal point
       final dx = details.focalPoint.dx - _startFocalPoint.dx;
@@ -429,6 +569,9 @@ class CameraOverlayController extends GetxController {
   }
 
   void onScaleEnd(ScaleEndDetails details) {
+    // Só permite salvamento se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     // Salva após terminar o gesto
     _autoSave();
   }
@@ -443,9 +586,12 @@ class CameraOverlayController extends GetxController {
     isDrawingMode.value = !isDrawingMode.value;
 
     if (isDrawingMode.value) {
-      // Quando entra no modo desenho, sincroniza câmera com imagem
-      cameraPositionX.value = imagePositionX.value;
-      cameraPositionY.value = imagePositionY.value;
+      // Quando entra no modo desenho, mantém câmera na posição normal
+      cameraPositionX.value = 0.0;
+      cameraPositionY.value = 0.0;
+
+      // Inicia o zoom da câmera zerado (zoom mínimo) no modo desenho
+      setCameraZoom(_minCameraZoom);
     } else {
       // Reset do zoom da câmera quando sai do modo desenho
       setCameraZoom(_minCameraZoom);
@@ -460,8 +606,23 @@ class CameraOverlayController extends GetxController {
         _stopAutoTransparencyAnimation();
       }
     }
-
     _autoSave();
+  }
+
+  // Sincroniza o zoom da câmera com base no zoom atual da imagem
+  void _syncCameraZoomWithImage() {
+    // Sincronização suave: apenas aplicar zoom na câmera quando a imagem está acima do zoom padrão (1.0)
+    if (imageScale.value > 1.0) {
+      // Mapeia zoom da imagem acima de 1.0 para o range da câmera
+      final double zoomAboveDefault = imageScale.value - 1.0; // 0.0 a 4.0
+      final double normalizedZoom = zoomAboveDefault / 4.0; // 0.0 a 1.0
+      final double targetCameraZoom =
+          _minCameraZoom + (normalizedZoom * (_maxCameraZoom - _minCameraZoom));
+      setCameraZoom(targetCameraZoom);
+    } else {
+      // Se zoom da imagem <= 1.0, mantém câmera no zoom mínimo
+      setCameraZoom(_minCameraZoom);
+    }
   }
 
   Future<void> setCameraZoom(double zoom) async {
@@ -566,18 +727,33 @@ class CameraOverlayController extends GetxController {
   }
 
   void updateImagePosition(double deltaX, double deltaY) {
+    // Só permite alteração de posição se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     imagePositionX.value += deltaX;
     imagePositionY.value += deltaY;
     _autoSave();
   }
 
   void updateImageScale(double scale) {
+    // Só permite escala se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     imageScale.value = scale;
     _updateCurrentDimensions(); // Atualiza dimensões quando escala mudar
+
+    // Se estiver no modo desenho, sincroniza o zoom da câmera
+    if (isDrawingMode.value) {
+      _syncCameraZoomWithImage();
+    }
+
     _autoSave();
   }
 
   void updateImageRotation(double rotation) {
+    // Só permite rotação se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     imageRotation.value = rotation;
     rotationTextController.text = rotation.toInt().toString();
     _autoSave();
@@ -594,6 +770,11 @@ class CameraOverlayController extends GetxController {
     // Reset das posições da câmera
     cameraPositionX.value = 0.0;
     cameraPositionY.value = 0.0;
+
+    // Se estiver no modo desenho, reset do zoom da câmera também
+    if (isDrawingMode.value) {
+      setCameraZoom(_minCameraZoom);
+    }
 
     // Reset da transparência automática
     autoTransparencyValue.value = 0.5;
@@ -642,6 +823,9 @@ class CameraOverlayController extends GetxController {
 
   // Aplica novas dimensões ajustando a escala
   void applyImageDimensions(int width, int height) {
+    // Só permite alteração de dimensões se o botão "Mover Imagem" estiver ativo
+    if (!isImageMoveButtonActive.value) return;
+
     if (originalImageWidth.value > 0 && originalImageHeight.value > 0) {
       // Calcula a escala baseada na largura (prioritária)
       final newScale = width / originalImageWidth.value;
